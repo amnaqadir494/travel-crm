@@ -374,8 +374,13 @@ async function addEmployee(token) {
         }
 
         document.getElementById('addEmployeeForm').reset();
-        successBox.innerText = `Employee added! Unke Employee ID hai: ${data.employeeId} — ye unhe de dein taake wo "Activate Account" se apna password set kar sakein.`;
+        
+        successBox.innerText = `Employee added!`;
         successBox.style.display = 'block';
+
+        setTimeout(() => {
+            successBox.style.display = 'none';
+        }, 3000);
 
         await fetchEmployees(token);
         renderEmployeesTable();
@@ -470,7 +475,7 @@ function appendDocumentRow(container, docName = '', docUrl = '') {
             <input type="file" class="pass-doc-file" accept="image/*,.pdf,.doc,.docx" style="width: 100%; font-size: 11px;">
             ${docUrl ? `<small style="display:block; font-size:10px;"><a href="${escapeHTML(docUrl)}" target="_blank">View Existing</a></small>` : ''}
         </div>
-        <button type="button" class="btn-remove-doc-row" title="Remove this document" style="background: #e53e3e; color: white; border: none; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0;">✕</button>
+        <button type="button" class="btn-remove-doc-row" title="Remove this document" style="background: #e53e3e; color: white; border: none; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0;">🗑️</button>
     `;
     container.appendChild(row);
 }
