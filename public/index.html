@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure CRM Dashboard</title>
+    <style>
+        td select, .table select {
+            padding: 4px 8px;
+            font-size: 12px;
+            border-radius: 4px;
+            border: 1px solid #ced4da;
+            background-color: #f8f9fa;
+            color: #495057;
+            max-width: 160px;
+            cursor: pointer;
+        }
+        td select:focus {
+            border-color: #80bdff;
+            outline: 0;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+        }
+        .admin-only { display: none !important; }
+        * { box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f6f9; }
+        .card { background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+        .header { display: flex; justify-content: space-between; align-items: center; }
+        .form-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+        .form-row div { flex: 1; min-width: 150px; }
+        label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #4a5568; }
+        input, select { width: 100%; padding: 8px 10px; border: 1px solid #cbd5e0; border-radius: 5px; font-size: 14px; }
+        table { width: 100%; margin-top: 10px; border-collapse: collapse; background: #fff; }
+        th, td { padding: 10px; border: 1px solid #ddd; text-align: left; font-size: 14px; }
+        th { background-color: #007bff; color: white; }
+        button { padding: 8px 14px; cursor: pointer; border: none; border-radius: 4px; font-size: 14px; }
+        .btn-primary { background-color: #229b9e; color: white; }
+        .btn-danger { background-color: #dc3545; color: white; }
+        .btn-edit { background-color: #3182ce; color: white; }
+        .btn-logout { background-color: #6c757d; color: white; }
+        .msg { padding: 10px; border-radius: 5px; font-size: 13px; margin-bottom: 12px; display: none; }
+        .msg-error { background: #fed7d7; color: #9b2c2c; }
+        .msg-success { background: #c6f6d5; color: #22543d; }
+        .passenger-section { background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 6px; margin-bottom: 10px; }
+        .emp-table td, .emp-table th { padding: 8px; font-size: 13px; }
+        .badge-activated { background: #c6f6d5; color: #22543d; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+        .badge-pending { background: #feebc8; color: #7b341e; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+    </style>
+</head>
+<body>
+
+    <!-- Edit Passengers Modal -->
+    <div id="editPassengersModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+        <div style="background: white; padding: 25px; border-radius: 8px; width: 600px; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h3 style="margin-top: 0; margin-bottom: 15px; color: #2d3748;">Edit Passengers</h3>
+
+            <div style="margin-bottom: 15px;">
+                <label style="display: block; font-weight: 600; margin-bottom: 5px;">Number of Passengers</label>
+                <input type="number" id="modalNumPersons" min="1" style="width: 100%; padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px;" />
+            </div>
+
+            <div id="modalPassengersContainer"></div>
+
+            <div style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" id="closeModalBtn" style="padding: 8px 15px; background: #cbd5e0; border: none; border-radius: 4px; cursor: pointer;">Cancel</button>
+                <button type="button" id="saveModalBtn" style="padding: 8px 15px; background: #3182ce; color: white; border: none; border-radius: 4px; cursor: pointer;">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Employee Modal -->
+    <div id="editEmployeeModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+        <div style="background: white; padding: 25px; border-radius: 8px; width: 400px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h3 style="margin-top: 0; margin-bottom: 15px; color: #2d3748;">Edit Employee</h3>
+            <div id="editEmpMsg" class="msg msg-error"></div>
+
+            <div class="form-group" style="margin-bottom: 12px;">
+                <label>Full Name</label>
+                <input type="text" id="editEmpName">
+            </div>
+            <div class="form-group" style="margin-bottom: 12px;">
+                <label>Email</label>
+                <input type="email" id="editEmpEmail">
+            </div>
+            <div class="form-group" style="margin-bottom: 12px;">
+                <label>Department</label>
+                <select id="editEmpDepartment">
+                    <option value="Visa">Visa Department</option>
+                    <option value="Ticketing">Ticketing Department</option>
+                    <option value="Finance">Finance Department</option>
+                    <option value="Tour">Tour Department</option>
+                    <option value="Admin">Admin</option>
+                </select>
+            </div>
+
+            <div style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" id="closeEditEmpModalBtn" style="padding: 8px 15px; background: #cbd5e0; border: none; border-radius: 4px; cursor: pointer;">Cancel</button>
+                <button type="button" id="saveEditEmpBtn" style="padding: 8px 15px; background: #3182ce; color: white; border: none; border-radius: 4px; cursor: pointer;">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card header">
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <img src="/logo.png" alt="Deluxe Holidays Logo" style="width: 90px;">
+            <h2>Deluxe CRM Dashboard</h2>
+        </div>
+        <div>
+            <span id="userNameDisplay" style="margin-right: 15px; font-weight: bold;"></span>
+            <button class="btn-logout" id="logoutBtn">Logout</button>
+        </div>
+    </div>
+
+    <!-- 👤 Employee Management — sirf Admin ko dikhta hai -->
+    <div class="card admin-only" id="employeeManagementCard">
+        <h3>Manage Employees</h3>
+        <div id="empMsg" class="msg msg-error"></div>
+        <div id="empSuccessMsg" class="msg msg-success"></div>
+
+        <table class="emp-table" id="employeesTable" style="margin-bottom: 20px;">
+            <thead>
+                <tr>
+                    <th>Employee ID</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Department</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="employeesTableBody"></tbody>
+        </table>
+
+        <h4 style="margin-bottom: 10px;">Add New Employee</h4>
+        <p style="font-size: 12px; color: #718096; margin-bottom: 10px;">
+            
+        </p>
+        <form id="addEmployeeForm">
+            <div class="form-row">
+                <div>
+                    <label>Full Name</label>
+                    <input type="text" id="empName" required placeholder="e.g. Bilal Raza">
+                </div>
+                <div>
+                    <label>Email</label>
+                    <input type="email" id="empEmail" required placeholder="bilal@deluxe.com">
+                </div>
+                <div>
+                    <label>Department</label>
+                    <select id="empDepartment" required>
+                        <option value="">-- Select Department --</option>
+                        <option value="Visa">Visa Department</option>
+                        <option value="Ticketing">Ticketing Department</option>
+                        <option value="Finance">Finance Department</option>
+                        <option value="Tour">Tour Department</option>
+                        <option value="Umrah & Hajj">Umrah & Hajj Department</option>
+                        <option value="International Tour">International Tour Department</option>
+                        <option value="Admin">Admin</option>
+                    </select>
+                </div>
+            </div>
+            <button type="submit" class="btn-primary">Add Employee</button>
+        </form>
+    </div>
+
+    <div class="card" id="addLeadCard">
+        <h3>Add New Lead</h3>
+        <div id="addLeadMsg" class="msg msg-error"></div>
+        <form id="addLeadForm">
+            <div class="form-row">
+                <div>
+                    <label>Full Name</label>
+                    <input type="text" id="newLeadName" required placeholder="e.g. Ahmed Raza">
+                </div>
+                <div>
+                    <label>Email</label>
+                    <input type="email" id="newLeadEmail" required placeholder="ahmed@gmail.com">
+                </div>
+                <div>
+                    <label>Phone</label>
+                    <input type="text" id="newLeadPhone" placeholder="03001234567">
+                </div>
+                <div>
+                    <label>Destination</label>
+                    <input type="text" id="newLeadDestination" placeholder="Dubai / Canada">
+                </div>
+                <div>
+                    <label>Status</label>
+                    <select id="newLeadStatus">
+                        <option value="Pending">Pending</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Confirmed">Confirmed</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Number of Persons</label>
+                    <input type="number" id="numberOfPersons" min="1" value="1">
+                </div>
+            </div>
+
+            <div id="passengersContainer"></div>
+
+            <button type="submit" class="btn-primary" style="margin-top: 10px;">Add Lead</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h3>Leads Management</h3>
+        <div style="margin-bottom: 15px;">
+            <label>Search by Name</label>
+            <input type="text" id="searchName" placeholder="e.g. Ahmed" style="max-width: 300px;">
+        </div>
+        <table id="leadsTable">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                    <th>Destination</th>
+                    <th>Status</th>
+                    <th>Passengers Info</th>
+                    <th>Visa Assigned</th>
+                    <th>Ticketing Assigned</th>
+                    <th>Finance Assigned</th>
+                    <th>Tour Assigned</th>
+                    <th class="admin-only">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="leadsTableBody"></tbody>
+        </table>
+    </div>
+
+    <script src="/dashboard.js"></script>
+</body>
+</html>

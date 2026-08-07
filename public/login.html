@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deluxe CRM - Authentication</title>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; }
+        body { background: #f4f6f9; display: flex; justify-content: center; align-items: center; height: 100vh; }
+
+        .card { background: white; padding: 35px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); width: 380px; text-align: center; }
+        .card h2 { color: #229b9e; margin-bottom: 25px; font-size: 20px; }
+
+        .form-group { margin-bottom: 16px; text-align: left; }
+        .form-group label { display: block; font-size: 13px; font-weight: 600; color: #4a5568; margin-bottom: 6px; }
+        .form-group input { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 14px; outline: none; }
+        .form-group input:focus { border-color: #229b9e; }
+
+        .forgot-pass { text-align: right; margin-top: -8px; margin-bottom: 14px; }
+        .forgot-pass a { color: #229b9e; font-size: 12px; font-weight: 600; text-decoration: none; }
+        .forgot-pass a:hover { text-decoration: underline; }
+
+        .btn-submit { background: #229b9e; color: white; width: 100%; padding: 12px; border: none; border-radius: 6px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 5px; }
+        .btn-submit:hover { background: #1b7f82; }
+
+        .error-msg { background: #fed7d7; color: #9b2c2c; padding: 10px; border-radius: 6px; font-size: 13px; margin-bottom: 15px; display: none; }
+        .no-account-text { margin-top: 20px; font-size: 12px; color: #718096; line-height: 1.5; }
+        .no-account-text a { color: #229b9e; font-weight: 600; text-decoration: none; }
+        .no-account-text a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <img src="/logo.png" alt="Deluxe Holidays Logo" style="width: 140px; margin-bottom: 15px;">
+    <h2>CRM Login</h2>
+
+    <div id="errorBox" class="error-msg"></div>
+
+    <form id="loginForm">
+        <div class="form-group">
+            <label>Employee ID</label>
+            <input type="text" id="loginEmployeeId" required placeholder="e.g. DLX-0007">
+        </div>
+
+        <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="loginPassword" required placeholder="••••••••">
+        </div>
+
+        <div class="forgot-pass">
+            <a href="#" id="forgotPassLink">Forgot password?</a>
+        </div>
+
+        <button type="submit" class="btn-submit">Login</button>
+
+        <div class="no-account-text">
+            First time login? <a href="/activate.html">Activate your account</a> using your Employee ID.
+        </div>
+    </form>
+</div>
+
+<script src="/auth.js"></script>
+</body>
+</html>
