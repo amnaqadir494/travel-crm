@@ -31,7 +31,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if (isAdmin) {
         document.querySelectorAll('.admin-only').forEach(el => {
-            const displayValue = (el.tagName === 'TH' || el.tagName === 'TD') ? 'table-cell' : 'block';
+            const displayValue = (el.tagName === 'TH' || el.tagName === 'TD') ? 'table-cell' : (el.tagName === 'BUTTON' ? 'inline-block' : 'block');
             el.style.setProperty('display', displayValue, 'important');
         });
     }
@@ -44,8 +44,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     injectAnalyticsUI();
 
-    renderPassengerInputs();
-    document.getElementById('numberOfPersons').addEventListener('input', renderPassengerInputs);
+    setupToggleButton('toggleEmployeesBtn', 'employeeManagementCard');
+    setupToggleButton('toggleAddLeadBtn', 'addLeadCard');
+    setupToggleButton('toggleAnalyticsBtn', 'dashboardAnalyticsSection');
+    setupToggleButton('toggleLeadsBtn', 'leadsManagementCard');
 
     loadLeads(token);
 
@@ -111,14 +113,40 @@ document.addEventListener("DOMContentLoaded", async () => {
         savePassengersFromModal(token);
     });
 
+    // Modal section switching & actions
     document.addEventListener('click', (e) => {
+        if (e.target && e.target.id === 'btnOpenTraveller') {
+            document.getElementById('travellerSection').style.display = 'block';
+            document.getElementById('followUpSection').style.display = 'none';
+            document.getElementById('documentSection').style.display = 'none';
+        }
+        if (e.target && e.target.id === 'btnOpenFollowUp') {
+            document.getElementById('travellerSection').style.display = 'none';
+            document.getElementById('followUpSection').style.display = 'block';
+            document.getElementById('documentSection').style.display = 'none';
+        }
+        if (e.target && e.target.id === 'btnOpenDocument') {
+            document.getElementById('travellerSection').style.display = 'none';
+            document.getElementById('followUpSection').style.display = 'none';
+            document.getElementById('documentSection').style.display = 'block';
+        }
+
         if (e.target.classList.contains('btn-add-doc-row')) {
-            const docsContainer = e.target.previousElementSibling;
-            const noDocsText = docsContainer.querySelector('.no-docs-text');
-            if (noDocsText) noDocsText.remove();
-            appendDocumentRow(docsContainer);
+            const docsContainer = document.querySelector('#documentSection .modal-passenger-docs-container');
+            if (docsContainer) {
+                const noDocsText = docsContainer.querySelector('.no-docs-text');
+                if (noDocsText) noDocsText.remove();
+                appendDocumentRow(docsContainer);
+            }
             return;
         }
+
+        if (e.target.classList.contains('btn-remove-note')) {
+            const noteCard = e.target.closest('.followup-note-card');
+            if (noteCard) noteCard.remove();
+            return;
+        }
+
         if (e.target.classList.contains('btn-remove-doc-row') || e.target.closest('.btn-remove-doc-row')) {
             const btn = e.target.closest('.btn-remove-doc-row');
             const row = btn.closest('.passenger-doc-row');
@@ -129,14 +157,22 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
             return;
         }
-        if (e.target.classList.contains('btn-clear-file') || e.target.closest('.btn-clear-file')) {
-            const btn = e.target.closest('.btn-clear-file');
-            const row = btn.closest('.passenger-doc-row');
-            const fileInput = row.querySelector('.pass-doc-file');
-            if (fileInput) fileInput.value = '';
-            return;
-        }
     });
+
+    const addNoteBtn = document.getElementById('btnAddFollowUpNote');
+    if (addNoteBtn) {
+        addNoteBtn.addEventListener('click', () => {
+            const textarea = document.getElementById('followUpNoteText');
+            const text = textarea.value.trim();
+            if (!text) {
+                alert("Please write something for the follow-up note.");
+                return;
+            }
+            const timeStr = new Date().toLocaleString();
+            appendFollowUpNoteCard(text, timeStr);
+            textarea.value = '';
+        });
+    }
 
     const leadsTableBody = document.getElementById('leadsTableBody');
     leadsTableBody.addEventListener('click', (e) => {
@@ -161,18 +197,20 @@ document.addEventListener("DOMContentLoaded", async () => {
             updateAssignment(leadId, field, assignSelect.value, token);
             return;
         }
-
-        const statusSelect = e.target.closest('.status-select');
-        if (statusSelect) {
-            const leadId = statusSelect.getAttribute('data-id');
-            updateStatus(leadId, statusSelect.value, token);
-        }
     });
 });
 
-// ==========================================
-// ANALYTICS DASHBOARD
-// ==========================================
+function setupToggleButton(btnId, sectionId) {
+    const btn = document.getElementById(btnId);
+    const section = document.getElementById(sectionId);
+    if (!btn || !section) return;
+
+    btn.addEventListener('click', () => {
+        const isHidden = section.style.display === 'none' || getComputedStyle(section).display === 'none';
+        section.style.setProperty('display', isHidden ? 'block' : 'none', 'important');
+    });
+}
+
 function injectAnalyticsUI() {
     if (document.getElementById('dashboardAnalyticsSection')) return;
     const isAdmin = currentUser.department === 'Admin';
@@ -180,7 +218,7 @@ function injectAnalyticsUI() {
     const analyticsDiv = document.createElement('div');
     analyticsDiv.id = 'dashboardAnalyticsSection';
     analyticsDiv.className = 'card';
-    analyticsDiv.style.cssText = 'margin-top: 15px;';
+    analyticsDiv.style.cssText = 'margin-top: 15px; display: none;';
 
     analyticsDiv.innerHTML = `
         <h3 style="margin-top: 0; margin-bottom: 15px; color: #2d3748; font-size: 18px;">📊 Dashboard Analytics & Workload Summary</h3>
@@ -191,18 +229,6 @@ function injectAnalyticsUI() {
                 <div style="font-size: 12px; color: #4a5568; font-weight: bold; text-transform: uppercase;">Total Leads</div>
                 <div id="statTotalLeads" style="font-size: 24px; font-weight: bold; color: #2d3748; margin-top: 5px;">0</div>
             </div>
-            <div style="background: #feebc8; padding: 15px; border-radius: 6px; border-left: 4px solid #dd6b20;">
-                <div style="font-size: 12px; color: #744210; font-weight: bold; text-transform: uppercase;">Pending Leads</div>
-                <div id="statPendingLeads" style="font-size: 24px; font-weight: bold; color: #744210; margin-top: 5px;">0</div>
-            </div>
-            <div style="background: #c6f6d5; padding: 15px; border-radius: 6px; border-left: 4px solid #38a169;">
-                <div style="font-size: 12px; color: #22543d; font-weight: bold; text-transform: uppercase;">Confirmed Leads</div>
-                <div id="statConfirmedLeads" style="font-size: 24px; font-weight: bold; color: #22543d; margin-top: 5px;">0</div>
-            </div>
-            <div style="background: #fed7d7; padding: 15px; border-radius: 6px; border-left: 4px solid #e53e3e;">
-                <div style="font-size: 12px; color: #742a2a; font-weight: bold; text-transform: uppercase;">Cancelled Leads</div>
-                <div id="statCancelledLeads" style="font-size: 24px; font-weight: bold; color: #742a2a; margin-top: 5px;">0</div>
-            </div>
         </div>
 
         <div id="personalStatsWrapper" style="display: ${isAdmin ? 'none' : 'block'}; margin-top: 20px; border-top: 2px dashed #cbd5e0; padding-top: 15px;">
@@ -211,18 +237,6 @@ function injectAnalyticsUI() {
                 <div style="background: #ebf8ff; padding: 15px; border-radius: 6px; border-left: 4px solid #3182ce;">
                     <div style="font-size: 12px; color: #2b6cb0; font-weight: bold; text-transform: uppercase;">My Total Assigned</div>
                     <div id="statMyTotal" style="font-size: 24px; font-weight: bold; color: #2b6cb0; margin-top: 5px;">0</div>
-                </div>
-                <div style="background: #feebc8; padding: 15px; border-radius: 6px; border-left: 4px solid #dd6b20;">
-                    <div style="font-size: 12px; color: #744210; font-weight: bold; text-transform: uppercase;">My Pending</div>
-                    <div id="statMyPending" style="font-size: 24px; font-weight: bold; color: #744210; margin-top: 5px;">0</div>
-                </div>
-                <div style="background: #c6f6d5; padding: 15px; border-radius: 6px; border-left: 4px solid #38a169;">
-                    <div style="font-size: 12px; color: #22543d; font-weight: bold; text-transform: uppercase;">My Confirmed</div>
-                    <div id="statMyConfirmed" style="font-size: 24px; font-weight: bold; color: #22543d; margin-top: 5px;">0</div>
-                </div>
-                <div style="background: #fed7d7; padding: 15px; border-radius: 6px; border-left: 4px solid #e53e3e;">
-                    <div style="font-size: 12px; color: #742a2a; font-weight: bold; text-transform: uppercase;">My Cancelled</div>
-                    <div id="statMyCancelled" style="font-size: 24px; font-weight: bold; color: #742a2a; margin-top: 5px;">0</div>
                 </div>
             </div>
         </div>
@@ -257,18 +271,12 @@ function injectAnalyticsUI() {
 
 function updateAnalyticsStats(leads) {
     const total = leads.length;
-    let pending = 0, confirmed = 0, cancelled = 0;
     let visaAssigned = 0, ticketingAssigned = 0, financeAssigned = 0, tourAssigned = 0;
-    let myTotal = 0, myPending = 0, myConfirmed = 0, myCancelled = 0;
+    let myTotal = 0;
     const myEmail = currentUser.email;
     const isAdmin = currentUser.department === 'Admin';
 
     leads.forEach(lead => {
-        const st = (lead.status || '').toLowerCase();
-        if (st.includes('confirm') || st.includes('approved')) confirmed++;
-        else if (st.includes('cancel')) cancelled++;
-        else pending++;
-
         if (lead.assignedVisa) visaAssigned++;
         if (lead.assignedTicketing) ticketingAssigned++;
         if (lead.assignedFinance) financeAssigned++;
@@ -283,16 +291,10 @@ function updateAnalyticsStats(leads) {
 
         if (isAssignedToMe) {
             myTotal++;
-            if (st.includes('confirm') || st.includes('approved')) myConfirmed++;
-            else if (st.includes('cancel')) myCancelled++;
-            else myPending++;
         }
     });
 
     if (document.getElementById('statTotalLeads')) document.getElementById('statTotalLeads').textContent = total;
-    if (document.getElementById('statPendingLeads')) document.getElementById('statPendingLeads').textContent = pending;
-    if (document.getElementById('statConfirmedLeads')) document.getElementById('statConfirmedLeads').textContent = confirmed;
-    if (document.getElementById('statCancelledLeads')) document.getElementById('statCancelledLeads').textContent = cancelled;
 
     if (document.getElementById('workloadVisa')) document.getElementById('workloadVisa').textContent = `Assigned Leads: ${visaAssigned}`;
     if (document.getElementById('workloadTicketing')) document.getElementById('workloadTicketing').textContent = `Assigned Leads: ${ticketingAssigned}`;
@@ -301,15 +303,9 @@ function updateAnalyticsStats(leads) {
 
     if (!isAdmin) {
         if (document.getElementById('statMyTotal')) document.getElementById('statMyTotal').textContent = myTotal;
-        if (document.getElementById('statMyPending')) document.getElementById('statMyPending').textContent = myPending;
-        if (document.getElementById('statMyConfirmed')) document.getElementById('statMyConfirmed').textContent = myConfirmed;
-        if (document.getElementById('statMyCancelled')) document.getElementById('statMyCancelled').textContent = myCancelled;
     }
 }
 
-// ==========================================
-// EMPLOYEES (fetch + admin CRUD)
-// ==========================================
 async function fetchEmployees(token) {
     try {
         const res = await fetch('/api/employees', {
@@ -374,13 +370,9 @@ async function addEmployee(token) {
         }
 
         document.getElementById('addEmployeeForm').reset();
-        
-        successBox.innerText = `Employee added!`;
+        successBox.innerText = `Employee successfully added!`;
         successBox.style.display = 'block';
-
-        setTimeout(() => {
-            successBox.style.display = 'none';
-        }, 3000);
+        setTimeout(() => { successBox.style.display = 'none'; }, 3000);
 
         await fetchEmployees(token);
         renderEmployeesTable();
@@ -461,56 +453,39 @@ async function deleteEmployee(id, token) {
     }
 }
 
-// ==========================================
-// PASSENGER / DOCUMENT UI
-// ==========================================
 function appendDocumentRow(container, docName = '', docUrl = '') {
     const row = document.createElement('div');
     row.className = 'passenger-doc-row';
+    row.dataset.existingUrl = docUrl || '';
     row.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; margin-bottom: 6px; align-items: center;';
 
     row.innerHTML = `
         <input type="text" class="pass-doc-name" value="${escapeHTML(docName)}" placeholder="Doc Name (e.g. Passport)" style="width: 100%; padding: 5px; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 12px;">
         <div>
             <input type="file" class="pass-doc-file" accept="image/*,.pdf,.doc,.docx" style="width: 100%; font-size: 11px;">
-            ${docUrl ? `<small style="display:block; font-size:10px;"><a href="${escapeHTML(docUrl)}" target="_blank">View Existing</a></small>` : ''}
+            ${docUrl ? `<small style="display:block; font-size:10px; margin-top:2px;"><a href="${escapeHTML(docUrl)}" target="_blank" style="color: #3182ce; font-weight: bold; text-decoration: underline;">🔍 View Document</a></small>` : ''}
         </div>
-        <button type="button" class="btn-remove-doc-row" title="Remove this document" style="background: #e53e3e; color: white; border: none; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0;">🗑️</button>
+        <button type="button" class="btn-remove-doc-row" title="Remove this document" style="background: #e53e3e; color: white; border: none; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0;">✕</button>
     `;
     container.appendChild(row);
 }
 
-function renderPassengerInputs() {
-    const count = parseInt(document.getElementById('numberOfPersons').value) || 1;
-    const container = document.getElementById('passengersContainer');
-    container.innerHTML = '<h4>Passenger Details & Documents</h4>';
+function appendFollowUpNoteCard(text, timeStr) {
+    const container = document.getElementById('followUpNotesList');
+    if (!container) return;
 
-    for (let i = 0; i < count; i++) {
-        const passengerDiv = document.createElement('div');
-        passengerDiv.className = 'passenger-section';
-        passengerDiv.style.cssText = 'background: #f8fafc; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px solid #e2e8f0;';
+    const card = document.createElement('div');
+    card.className = 'followup-note-card';
+    card.style.cssText = 'background: #fffaf0; border: 1px solid #feebc8; border-left: 4px solid #d69e2e; padding: 10px; border-radius: 6px; margin-bottom: 8px; position: relative;';
 
-        passengerDiv.innerHTML = `
-            <strong>Passenger ${i + 1}</strong>
-            <div style="margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <div><label style="font-size: 12px;">Name</label><input type="text" class="pass-name" placeholder="Full Name" style="width: 100%; padding: 6px; border: 1px solid #cbd5e0; border-radius: 4px;"></div>
-                <div><label style="font-size: 12px;">CNIC</label><input type="text" class="pass-cnic" placeholder="CNIC" style="width: 100%; padding: 6px; border: 1px solid #cbd5e0; border-radius: 4px;"></div>
-                <div><label style="font-size: 12px;">Passport Number</label><input type="text" class="pass-passport" placeholder="Passport" style="width: 100%; padding: 6px; border: 1px solid #cbd5e0; border-radius: 4px;"></div>
-                <div><label style="font-size: 12px;">Phone Number</label><input type="text" class="pass-phone" placeholder="Phone" style="width: 100%; padding: 6px; border: 1px solid #cbd5e0; border-radius: 4px;"></div>
-            </div>
-            <div style="margin-top: 10px;">
-                <label style="font-size: 12px; font-weight: bold; display: block; margin-bottom: 4px;">Documents</label>
-                <div class="passenger-docs-container"><p class="no-docs-text" style="font-size: 12px; color: #718096; margin: 4px 0;">No documents</p></div>
-                <button type="button" class="btn-add-doc-row" style="background: #3182ce; color: white; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; margin-top: 4px;">+ Add Document</button>
-            </div>
-        `;
-        container.appendChild(passengerDiv);
-    }
+    card.innerHTML = `
+        <div style="font-size: 11px; color: #718096; margin-bottom: 4px;">🕒 ${escapeHTML(timeStr)}</div>
+        <div style="font-size: 13px; color: #2d3748; white-space: pre-wrap; word-break: break-word;">${escapeHTML(text)}</div>
+        <button type="button" class="btn-remove-note" style="position: absolute; top: 8px; right: 8px; background: #e53e3e; color: white; border: none; width: 22px; height: 22px; border-radius: 50%; cursor: pointer; font-size: 11px; display: flex; align-items: center; justify-content: center; padding: 0;" title="Delete Note">✕</button>
+    `;
+    container.appendChild(card);
 }
 
-// ==========================================
-// LEADS
-// ==========================================
 async function loadLeads(token) {
     try {
         const response = await fetch('/api/leads', {
@@ -565,15 +540,8 @@ function buildAssignCell(lead, fieldKey) {
     return `<select class="assign-select" data-id="${escapeHTML(lead.id)}" data-field="${fieldKey}">${options}</select>`;
 }
 
-const STATUS_OPTIONS = ['Pending', 'In Progress', 'Confirmed', 'Cancelled'];
-
-function buildStatusCell(lead) {
-    let options = STATUS_OPTIONS.map(s => {
-        const selected = s === lead.status ? 'selected' : '';
-        return `<option value="${s}" ${selected}>${s}</option>`;
-    }).join('');
-
-    return `<select class="status-select" data-id="${escapeHTML(lead.id)}">${options}</select>`;
+function buildSourceCell(lead) {
+    return `<span>${escapeHTML(lead.source || 'Direct')}</span>`;
 }
 
 function renderLeads(leads, searchQuery = '') {
@@ -596,15 +564,33 @@ function renderLeads(leads, searchQuery = '') {
         let passengersHtml = '';
         if (lead.passengers && lead.passengers.length > 0) {
             passengersHtml = lead.passengers.map((p, idx) => {
-                const docs = p.documents && p.documents.length > 0 ? p.documents : [];
-                let docsList = docs.length > 0
-                    ? docs.map(d => `<div>- ${escapeHTML(d.name || 'Doc')} ${d.url ? `(<a href="${escapeHTML(d.url)}" target="_blank">View</a>)` : ''}</div>`).join('')
-                    : '<em>No documents</em>';
-                return `<div style="font-size: 12px; border-bottom: 1px dashed #ccc; padding-bottom: 4px; margin-bottom: 4px;"><strong>P${idx + 1}:</strong> ${escapeHTML(p.name || 'N/A')} | Pass: ${escapeHTML(p.passport || 'N/A')}<br><strong>Docs:</strong><br>${docsList}</div>`;
+                return `<div style="font-size: 12px; border-bottom: 1px dashed #ccc; padding-bottom: 4px; margin-bottom: 4px;"><strong>P${idx + 1}:</strong> ${escapeHTML(p.name || 'N/A')} | Pass: ${escapeHTML(p.passport || 'N/A')} ${p.ageCategory ? `| ${escapeHTML(p.ageCategory)}` : ''}</div>`;
             }).join('');
         } else {
             passengersHtml = '<div style="margin-bottom: 5px;">N/A</div>';
         }
+
+        if (lead.documents && lead.documents.length > 0) {
+            passengersHtml += '<div style="font-size: 12px; margin-top: 6px;"><strong>📄 Documents:</strong><br>' +
+                lead.documents.map(d => `- ${escapeHTML(d.name || 'Doc')} ${d.url ? `(<a href="${escapeHTML(d.url)}" target="_blank" style="color: #3182ce; font-weight: bold;">View</a>)` : ''}`).join('<br>') +
+                '</div>';
+        }
+
+        if (lead.followUpNotes && lead.followUpNotes.length > 0) {
+            lead.followUpNotes.forEach(note => {
+                passengersHtml += `<div style="background: #fffaf0; border-left: 3px solid #d69e2e; padding: 4px 6px; font-size: 11px; margin-top: 4px; border-radius: 4px;"><strong>Follow-up (${escapeHTML(note.time)}):</strong> ${escapeHTML(note.text)}</div>`;
+            });
+        }
+
+        const createdAtStr = lead.createdAtTime || 'N/A';
+        const updatedAtStr = lead.updatedAtTime || 'N/A';
+        
+        passengersHtml += `
+            <div style="font-size: 10px; color: #4a5568; margin-top: 8px; border-top: 1px solid #e2e8f0; paddingTop: 4px; background: #edf2f7; padding: 4px; border-radius: 4px;">
+                <div><strong>Created:</strong> ${escapeHTML(lead.createdBy || 'System')} (${createdAtStr})</div>
+                <div><strong>Last Updated:</strong> ${escapeHTML(lead.updatedBy || 'System')} (${updatedAtStr})</div>
+            </div>
+        `;
 
         passengersHtml += `<button type="button" class="btn-primary btn-edit-passengers" data-id="${escapeHTML(lead.id)}" style="padding: 4px 10px; font-size: 11px; margin-top: 5px; cursor: pointer;">Edit / Upload Docs</button>`;
 
@@ -613,7 +599,7 @@ function renderLeads(leads, searchQuery = '') {
             <td>${escapeHTML(lead.email)}</td>
             <td>${escapeHTML(lead.phone)}</td>
             <td>${escapeHTML(lead.destination)}</td>
-            <td>${buildStatusCell(lead)}</td>
+            <td>${buildSourceCell(lead)}</td>
             <td>${passengersHtml}</td>
             <td>${buildAssignCell(lead, 'assignedVisa')}</td>
             <td>${buildAssignCell(lead, 'assignedTicketing')}</td>
@@ -629,13 +615,65 @@ function renderLeads(leads, searchQuery = '') {
 
 function openEditPassengersModal(leadId) {
     let lead = allLeads.find(l => String(l.id) === String(leadId));
-    if (!lead) lead = { id: leadId, passengers: [] };
+    if (!lead) lead = { id: leadId, passengers: [], followUpNotes: [], documents: [] };
 
     currentEditingLeadId = leadId;
     const currentCount = lead.numberOfPersons || (lead.passengers ? lead.passengers.length : 1);
 
+    document.getElementById('travellerSection').style.display = 'none';
+    document.getElementById('followUpSection').style.display = 'none';
+    document.getElementById('documentSection').style.display = 'none';
+
     document.getElementById('modalNumPersons').value = currentCount;
     renderModalPassengerInputs(currentCount, lead.passengers || []);
+
+    let leadSummaryBox = document.getElementById('modalLeadSummaryBox');
+    if (!leadSummaryBox) {
+        leadSummaryBox = document.createElement('div');
+        leadSummaryBox.id = 'modalLeadSummaryBox';
+        const titleEl = document.querySelector('#editPassengersModal h3');
+        if (titleEl) titleEl.insertAdjacentElement('afterend', leadSummaryBox);
+    }
+    
+    const createdAtStr = lead.createdAtTime || 'N/A';
+    const updatedAtStr = lead.updatedAtTime || 'N/A';
+
+    leadSummaryBox.style.cssText = 'background: #f7fafc; border: 1px solid #cbd5e0; border-left: 4px solid #3182ce; padding: 10px 14px; border-radius: 6px; margin-bottom: 15px; font-size: 13px; color: #2d3748;';
+    leadSummaryBox.innerHTML = `
+        <div style="font-weight: bold; margin-bottom: 4px; color: #2b6cb0;">📋 Lead Details & Audit Trail</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+            <div><strong>Name:</strong> ${escapeHTML(lead.name || 'N/A')}</div>
+            <div><strong>Email:</strong> ${escapeHTML(lead.email || 'N/A')}</div>
+            <div><strong>Phone:</strong> ${escapeHTML(lead.phone || 'N/A')}</div>
+            <div><strong>Destination:</strong> ${escapeHTML(lead.destination || 'N/A')}</div>
+            <div style="grid-column: span 2;"><strong>Source:</strong> ${escapeHTML(lead.source || 'Direct')}</div>
+            <div style="grid-column: span 2; border-top: 1px dashed #cbd5e0; margin-top: 4px; padding-top: 4px; font-size: 11px; color: #4a5568;">
+                <div><strong>Created By:</strong> ${escapeHTML(lead.createdBy || 'System')} at ${createdAtStr}</div>
+                <div><strong>Last Updated By:</strong> ${escapeHTML(lead.updatedBy || 'System')} at ${updatedAtStr}</div>
+            </div>
+        </div>
+    `;
+
+    const notesContainer = document.getElementById('followUpNotesList');
+    if (notesContainer) {
+        notesContainer.innerHTML = '';
+        const notesArray = Array.isArray(lead.followUpNotes) ? lead.followUpNotes : [];
+        notesArray.forEach(note => {
+            appendFollowUpNoteCard(note.text, note.time || 'Saved Note');
+        });
+    }
+
+    const docContainer = document.querySelector('#documentSection .modal-passenger-docs-container');
+    if (docContainer) {
+        docContainer.innerHTML = '';
+        const docs = Array.isArray(lead.documents) ? lead.documents : [];
+        if (docs.length > 0) {
+            docs.forEach(d => appendDocumentRow(docContainer, d.name, d.url));
+        } else {
+            docContainer.innerHTML = '<p class="no-docs-text" style="font-size: 12px; color: #718096; margin: 4px 0;">No documents</p>';
+        }
+    }
+
     document.getElementById('editPassengersModal').style.display = 'flex';
 }
 
@@ -656,22 +694,19 @@ function renderModalPassengerInputs(count, existingPassengers = []) {
                 <div><label style="font-size: 12px;">CNIC</label><input type="text" class="modal-pass-cnic" value="${escapeHTML(p.cnic || '')}" style="width: 100%; padding: 6px; border: 1px solid #cbd5e0; border-radius: 4px;"></div>
                 <div><label style="font-size: 12px;">Passport Number</label><input type="text" class="modal-pass-passport" value="${escapeHTML(p.passport || '')}" style="width: 100%; padding: 6px; border: 1px solid #cbd5e0; border-radius: 4px;"></div>
                 <div><label style="font-size: 12px;">Phone Number</label><input type="text" class="modal-pass-phone" value="${escapeHTML(p.phone || '')}" style="width: 100%; padding: 6px; border: 1px solid #cbd5e0; border-radius: 4px;"></div>
-            </div>
-            <div style="margin-top: 10px;">
-                <label style="font-size: 12px; font-weight: bold; display: block; margin-bottom: 4px;">Documents</label>
-                <div class="modal-passenger-docs-container"></div>
-                <button type="button" class="btn-add-doc-row" style="background: #3182ce; color: white; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; margin-top: 4px;">+ Add Document</button>
+                <div style="grid-column: span 2;">
+                    <label style="font-size: 12px;">Age Category</label>
+                    <select class="modal-pass-age" style="width: 100%; padding: 6px; border: 1px solid #cbd5e0; border-radius: 4px; background: #fff;">
+                        <option value="" ${!p.ageCategory ? 'selected' : ''}>-- Select Age Category --</option>
+                        <option value="Adult" ${p.ageCategory === 'Adult' ? 'selected' : ''}>Adult</option>
+                        <option value="Child with bed" ${p.ageCategory === 'Child with bed' ? 'selected' : ''}>Child with bed</option>
+                        <option value="Child without bed" ${p.ageCategory === 'Child without bed' ? 'selected' : ''}>Child without bed</option>
+                        <option value="Infant" ${p.ageCategory === 'Infant' ? 'selected' : ''}>Infant</option>
+                    </select>
+                </div>
             </div>
         `;
         container.appendChild(passengerBox);
-
-        const docsContainer = passengerBox.querySelector('.modal-passenger-docs-container');
-        const docs = p.documents && p.documents.length > 0 ? p.documents : [];
-        if (docs.length > 0) {
-            docs.forEach(d => appendDocumentRow(docsContainer, d.name, d.url));
-        } else {
-            docsContainer.innerHTML = '<p class="no-docs-text" style="font-size: 12px; color: #718096; margin: 4px 0;">No documents</p>';
-        }
     }
 }
 
@@ -683,32 +718,47 @@ async function savePassengersFromModal(token) {
     const formData = new FormData();
     formData.append('numberOfPersons', count);
 
+    // 🕒 Current logged-in user ka naam aur exact time fetch karein
+    const currentModifier = currentUser ? `${currentUser.name} (${currentUser.department})` : 'Unknown';
+    const currentDateTime = new Date().toLocaleString();
+    formData.append('updatedBy', currentModifier);
+    formData.append('updatedAtTime', currentDateTime);
+
+    let followUpNotes = [];
+    document.querySelectorAll('.followup-note-card').forEach(card => {
+        const timeDivText = card.querySelector('div:nth-child(1)').textContent;
+        const timeStr = timeDivText.replace('🕒 ', '').trim();
+        const textDiv = card.querySelector('div:nth-child(2)').textContent;
+        followUpNotes.push({ time: timeStr, text: textDiv });
+    });
+    formData.append('followUpNotes', JSON.stringify(followUpNotes));
+
     let passengersMeta = [];
-    boxes.forEach((box, passengerIndex) => {
-        const docRows = box.querySelectorAll('.passenger-doc-row');
-        let documentsMeta = [];
-
-        docRows.forEach((row, docIndex) => {
-            const docName = row.querySelector('.pass-doc-name').value.trim();
-            const fileInput = row.querySelector('.pass-doc-file');
-            let hasFile = false;
-            if (fileInput && fileInput.files[0]) {
-                hasFile = true;
-                formData.append(`passengerDoc_${passengerIndex}_${docIndex}`, fileInput.files[0]);
-            }
-            documentsMeta.push({ name: docName, hasFile: hasFile });
-        });
-
+    boxes.forEach((box) => {
         passengersMeta.push({
             name: box.querySelector('.modal-pass-name').value.trim(),
             cnic: box.querySelector('.modal-pass-cnic').value.trim(),
             passport: box.querySelector('.modal-pass-passport').value.trim(),
             phone: box.querySelector('.modal-pass-phone').value.trim(),
-            documents: documentsMeta
+            ageCategory: box.querySelector('.modal-pass-age') ? box.querySelector('.modal-pass-age').value : ''
         });
     });
-
     formData.append('passengers', JSON.stringify(passengersMeta));
+
+    const docRows = document.querySelectorAll('#documentSection .passenger-doc-row');
+    let documentsMeta = [];
+    docRows.forEach((row, docIndex) => {
+        const docName = row.querySelector('.pass-doc-name').value.trim();
+        const fileInput = row.querySelector('.pass-doc-file');
+        const existingUrl = row.dataset.existingUrl || '';
+        let hasFile = false;
+        if (fileInput && fileInput.files[0]) {
+            hasFile = true;
+            formData.append(`leadDoc_${docIndex}`, fileInput.files[0]);
+        }
+        documentsMeta.push({ name: docName, url: existingUrl, hasFile: hasFile });
+    });
+    formData.append('documents', JSON.stringify(documentsMeta));
 
     try {
         const res = await fetch(`/api/leads/${currentEditingLeadId}`, {
@@ -719,13 +769,13 @@ async function savePassengersFromModal(token) {
 
         const data = await res.json();
         if (!res.ok) {
-            alert(data.error || 'Failed to update passenger details');
+            alert(data.error || 'Failed to update details');
         } else {
             document.getElementById('editPassengersModal').style.display = 'none';
             loadLeads(token);
         }
     } catch (err) {
-        console.error("Update passengers error:", err);
+        console.error("Update error:", err);
     }
 }
 
@@ -739,35 +789,9 @@ async function addLead(token) {
     formData.append('email', document.getElementById('newLeadEmail').value);
     formData.append('phone', document.getElementById('newLeadPhone').value);
     formData.append('destination', document.getElementById('newLeadDestination').value);
-    formData.append('status', document.getElementById('newLeadStatus').value);
+    formData.append('source', document.getElementById('newLeadSource').value);
     formData.append('numberOfPersons', numberOfPersons);
-
-    const passengersMeta = [];
-    document.querySelectorAll('.passenger-section').forEach((sec, passengerIndex) => {
-        const docRows = sec.querySelectorAll('.passenger-doc-row');
-        let documentsMeta = [];
-
-        docRows.forEach((row, docIndex) => {
-            const docName = row.querySelector('.pass-doc-name').value.trim();
-            const fileInput = row.querySelector('.pass-doc-file');
-            let hasFile = false;
-            if (fileInput && fileInput.files[0]) {
-                hasFile = true;
-                formData.append(`passengerDoc_${passengerIndex}_${docIndex}`, fileInput.files[0]);
-            }
-            documentsMeta.push({ name: docName, hasFile: hasFile });
-        });
-
-        passengersMeta.push({
-            name: sec.querySelector('.pass-name').value.trim(),
-            cnic: sec.querySelector('.pass-cnic').value.trim(),
-            passport: sec.querySelector('.pass-passport').value.trim(),
-            phone: sec.querySelector('.pass-phone').value.trim(),
-            documents: documentsMeta
-        });
-    });
-
-    formData.append('passengers', JSON.stringify(passengersMeta));
+    formData.append('passengers', JSON.stringify([]));
 
     try {
         const res = await fetch('/api/leads', {
@@ -785,7 +809,6 @@ async function addLead(token) {
 
         document.getElementById('addLeadForm').reset();
         document.getElementById('numberOfPersons').value = 1;
-        renderPassengerInputs();
         loadLeads(token);
     } catch (err) {
         console.error("Add lead error:", err);
@@ -809,25 +832,6 @@ async function updateAssignment(leadId, field, value, token) {
         loadLeads(token);
     } catch (err) {
         console.error("Assignment update error:", err);
-        loadLeads(token);
-    }
-}
-
-async function updateStatus(leadId, status, token) {
-    try {
-        const res = await fetch(`/api/leads/${leadId}/status`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ status })
-        });
-
-        const data = await res.json();
-        if (!res.ok) {
-            alert(data.error || 'Failed to update status');
-        }
-        loadLeads(token);
-    } catch (err) {
-        console.error("Status update error:", err);
         loadLeads(token);
     }
 }

@@ -28,9 +28,19 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 app.use(express.json());
+
+const MAINTENANCE_FLAG = path.join(__dirname, 'maintenance.flag');
+app.use((req, res, next) => {
+    if (fs.existsSync(MAINTENANCE_FLAG)) {
+        if (req.path.startsWith('/api/')) {
+            return res.status(503).json({ error: 'System is under maintenance. Please try again later.' });
+        }
+        return res.sendFile(path.join(__dirname, 'public', 'maintenance.html'));
+    }
+    next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 📁 Uploads folder — HAMESHA public/uploads mein hi save hoga
 const uploadDir = path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
@@ -51,7 +61,6 @@ app.get('/index.html', (req, res) => res.sendFile(path.join(__dirname, 'public',
 app.get('/activate.html', (req, res) => res.sendFile(path.join(__dirname, 'public', 'activate.html')));
 app.get('/test', (req, res) => res.send("Server is working perfectly!"));
 
-// 🐘 PostgreSQL Connection via Sequelize
 const sequelize = new Sequelize(process.env.DATABASE_URL || 'postgres://postgres:root@localhost:5432/deluxe_crm', {
     dialect: 'postgres',
     logging: false
@@ -76,6 +85,12 @@ const LeadPSQL = sequelize.define('Lead', {
     status: { type: DataTypes.STRING, defaultValue: 'Pending' },
     numberOfPersons: { type: DataTypes.INTEGER, defaultValue: 1 },
     passengers: { type: DataTypes.JSON },
+    followUpNotes: { type: DataTypes.JSON },
+    documents: { type: DataTypes.JSON },
+    createdBy: { type: DataTypes.STRING },
+    updatedBy: { type: DataTypes.STRING },
+    createdAtTime: { type: DataTypes.STRING },
+    updatedAtTime: { type: DataTypes.STRING },
     assignedVisa: { type: DataTypes.STRING },
     assignedTicketing: { type: DataTypes.STRING },
     assignedFinance: { type: DataTypes.STRING },
@@ -86,13 +101,24 @@ const LeadPSQL = sequelize.define('Lead', {
 });
 
 sequelize.authenticate()
-    .then(() => {
+    .then(async () => {
         console.log("✅ Connected to PostgreSQL Successfully");
-        return sequelize.sync({ alter: true });
+        try {
+            await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "followUpNotes" JSON;');
+            await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "documents" JSON;');
+            await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "createdBy" VARCHAR(255);');
+            await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "updatedBy" VARCHAR(255);');
+            await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "createdAtTime" VARCHAR(255);');
+            await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "updatedAtTime" VARCHAR(255);');
+            console.log("✅ Lead tracking columns verified/added successfully via code");
+        } catch (migrationErr) {
+            console.error("⚠️ Migration check note:", migrationErr.message);
+        }
+        await sequelize.sync({ alter: true });
+        console.log("✅ Tables verified/synced");
     })
-    .then(() => console.log("✅ Tables verified/synced"))
     .catch((err) => {
-        console.error("❌ PostgreSQL Connection Failed:", err);
+        console.error("❌ PostgreSQL Connection/Sync Failed:", err);
     });
 
 function authenticateToken(req, res, next) {
@@ -120,7 +146,6 @@ function isStrongPassword(password) {
     return strongRegex.test(password);
 }
 
-// 🆔 Employee ID hamesha user ke DB id se banaya jata hai
 function buildEmployeeId(id) {
     return `DLX-${String(id).padStart(4, '0')}`;
 }
@@ -132,9 +157,54 @@ function parseEmployeeId(employeeId) {
     return parseInt(match[1], 10);
 }
 
-// ==========================================
-// AUTH — LOGIN (Employee ID + Password)
-// ==========================================
+// 🔧 NEW HELPER: har jagah se yehi function use hoga taake createdBy/updatedBy
+// KABHI bhi "System"/null na bane jab tak user actually logged in hai.
+// Agar req.user.name na mile to email se fallback karega, department na ho to bhi chalega.
+function buildActorLabel(req) {
+    if (!req.user) {
+        console.log("⚠️ buildActorLabel: req.user is MISSING! Token decode ya middleware order check karein.");
+        return 'Unknown';
+    }
+    const namePart = req.user.name || req.user.email || `User#${req.user.id}`;
+    const deptPart = req.user.department ? ` (${req.user.department})` : '';
+    const label = `${namePart}${deptPart}`;
+    console.log("🕵️ buildActorLabel -> req.user:", req.user, "=> label:", label);
+    return label;
+}
+
+// 🔧 NEW HELPER: server ke OS timezone/locale pe depend nahi karta —
+// hamesha Pakistan (Asia/Karachi) time deta hai. AM/PM khud manually
+// calculate karte hain (24-hour value se) taake Node.js ke Intl/ICU
+// wale "hour12: true" bug se bacha ja sake (jo kabhi kabhi PM ko
+// galat tarah AM dikha deta hai).
+function getFormattedDateTime() {
+    const now = new Date();
+
+    // Pakistan timezone mein 24-hour (h23) values nikalte hain — yeh
+    // hamesha sahi hoti hain, koi AM/PM ambiguity nahi hoti isme.
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Karachi',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23'
+    }).formatToParts(now);
+
+    const map = {};
+    parts.forEach(p => { map[p.type] = p.value; });
+
+    const hour24 = parseInt(map.hour, 10);
+    const ampm = hour24 >= 12 ? 'PM' : 'AM';
+    let hour12 = hour24 % 12;
+    if (hour12 === 0) hour12 = 12;
+    const hour12Str = String(hour12).padStart(2, '0');
+
+    return `${map.month}/${map.day}/${map.year}, ${hour12Str}:${map.minute}:${map.second} ${ampm}`;
+}
+
 app.post('/api/auth/login', async (req, res) => {
     try {
         const { employeeId, password } = req.body;
@@ -151,7 +221,7 @@ app.post('/api/auth/login', async (req, res) => {
         if (!foundUser) return res.status(401).json({ error: "Invalid Employee ID or password!" });
 
         if (!foundUser.password) {
-            return res.status(401).json({ error: "Account not activated yet. Please use 'Activate Account' with your Employee ID first." });
+            return res.status(401).json({ error: "Account not activated yet." });
         }
 
         const isMatch = await bcrypt.compare(password, foundUser.password);
@@ -179,9 +249,6 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
-// ==========================================
-// ACCOUNT ACTIVATION — employee apna password khud set karta hai
-// ==========================================
 app.post('/api/auth/activate', [
     body('employeeId').trim().notEmpty().withMessage('Employee ID is required'),
     body('email').isEmail().withMessage('Valid email is required'),
@@ -209,7 +276,7 @@ app.post('/api/auth/activate', [
         }
 
         if (foundUser.password) {
-            return res.status(400).json({ error: "This account is already activated. Please login normally." });
+            return res.status(400).json({ error: "This account is already activated." });
         }
 
         if (!isStrongPassword(newPassword)) {
@@ -219,16 +286,13 @@ app.post('/api/auth/activate', [
         const hashedPassword = await bcrypt.hash(newPassword, 10);
         await foundUser.update({ password: hashedPassword });
 
-        res.json({ message: "Account activated successfully! You can now login." });
+        res.json({ message: "Account activated successfully!" });
     } catch (err) {
         console.error("❌ Activation Error:", err);
         res.status(500).json({ error: "Activation failed: " + err.message });
     }
 });
 
-// ==========================================
-// EMPLOYEES — read access for everyone (assign dropdowns ke liye)
-// ==========================================
 app.get('/api/employees', authenticateToken, async (req, res) => {
     try {
         const users = await UserPSQL.findAll({ attributes: ['id', 'name', 'email', 'department', 'password'] });
@@ -247,9 +311,6 @@ app.get('/api/employees', authenticateToken, async (req, res) => {
     }
 });
 
-// ==========================================
-// ADMIN — Employee Management (Add / Edit / Delete) — Admin only
-// ==========================================
 app.post('/api/admin/users', authenticateToken, requireAdmin, [
     body('name').trim().isLength({ min: 3, max: 50 }).withMessage('Name must be between 3 and 50 characters'),
     body('email').isEmail().withMessage('Invalid email format'),
@@ -330,9 +391,6 @@ app.delete('/api/admin/users/:id', authenticateToken, requireAdmin, async (req, 
     }
 });
 
-// ==========================================
-// LEADS
-// ==========================================
 app.get('/api/leads', authenticateToken, async (req, res) => {
     try {
         const leads = await LeadPSQL.findAll({ order: [['id', 'DESC']] });
@@ -353,43 +411,32 @@ app.post('/api/leads', authenticateToken, upload.any(), [
             return res.status(400).json({ error: errors.array().map(e => e.msg).join(', ') });
         }
 
-        const { name, email, phone, destination, status } = req.body;
+        const { name, email, phone, destination, source } = req.body;
         const numberOfPersons = parseInt(req.body.numberOfPersons) || 1;
+        const creatorName = buildActorLabel(req);
+        const currentDateTime = getFormattedDateTime();
 
         let passengersMeta = [];
         if (req.body.passengers) {
             try { passengersMeta = JSON.parse(req.body.passengers); } catch (e) { passengersMeta = []; }
         }
 
-        const files = req.files || [];
-        passengersMeta = passengersMeta.map((p, pIdx) => {
-            const documents = (p.documents || [])
-                .map((doc, dIdx) => {
-                    const matchedFile = files.find(f => f.fieldname === `passengerDoc_${pIdx}_${dIdx}`);
-                    return {
-                        name: doc.name || 'Document',
-                        url: matchedFile ? `/uploads/${matchedFile.filename}` : (doc.url || '')
-                    };
-                })
-                .filter(d => d.url);
-
-            return {
-                name: p.name || '',
-                cnic: p.cnic || '',
-                passport: p.passport || '',
-                phone: p.phone || '',
-                documents
-            };
-        });
-
         const newLead = await LeadPSQL.create({
             name, email,
             phone: phone || '',
             destination: destination || '',
-            status: status || 'Pending',
+            source: source || 'Direct',
             numberOfPersons,
-            passengers: passengersMeta
+            passengers: passengersMeta,
+            followUpNotes: [],
+            documents: [],
+            createdBy: creatorName,
+            updatedBy: creatorName,
+            createdAtTime: currentDateTime,
+            updatedAtTime: currentDateTime
         });
+
+        console.log("✅ Lead created with createdBy =", newLead.createdBy, "| createdAtTime =", newLead.createdAtTime);
 
         res.status(201).json(newLead);
     } catch (err) {
@@ -406,42 +453,70 @@ app.put('/api/leads/:id', authenticateToken, upload.any(), async (req, res) => {
 
         let numberOfPersons = leadToUpdate.numberOfPersons;
         let passengers = leadToUpdate.passengers;
+        let followUpNotes = leadToUpdate.followUpNotes || [];
+        let documents = leadToUpdate.documents || [];
+        const modifierName = buildActorLabel(req);
+        const currentDateTime = getFormattedDateTime();
 
         if (req.body.numberOfPersons !== undefined) {
             numberOfPersons = parseInt(req.body.numberOfPersons) || numberOfPersons;
         }
 
+        if (req.body.followUpNotes !== undefined) {
+            try {
+                const parsed = JSON.parse(req.body.followUpNotes);
+                followUpNotes = Array.isArray(parsed) ? parsed : followUpNotes;
+            } catch (e) {
+                console.error("⚠️ followUpNotes parse error:", e.message);
+            }
+        }
+
         if (req.body.passengers !== undefined) {
-            let passengersMeta = [];
-            try { passengersMeta = JSON.parse(req.body.passengers); } catch (e) { passengersMeta = []; }
-
-            const files = req.files || [];
-            const existingPassengers = leadToUpdate.passengers || [];
-
-            passengers = passengersMeta.map((p, pIdx) => {
-                const existingDocs = (existingPassengers[pIdx] && existingPassengers[pIdx].documents) || [];
-                const documents = (p.documents || [])
-                    .map((doc, dIdx) => {
-                        const matchedFile = files.find(f => f.fieldname === `passengerDoc_${pIdx}_${dIdx}`);
-                        const fallbackUrl = existingDocs[dIdx] ? existingDocs[dIdx].url : '';
-                        return {
-                            name: doc.name || 'Document',
-                            url: matchedFile ? `/uploads/${matchedFile.filename}` : fallbackUrl
-                        };
-                    })
-                    .filter(d => d.url);
-
-                return {
+            try {
+                const parsed = JSON.parse(req.body.passengers);
+                passengers = Array.isArray(parsed) ? parsed.map(p => ({
                     name: p.name || '',
                     cnic: p.cnic || '',
                     passport: p.passport || '',
                     phone: p.phone || '',
-                    documents
-                };
-            });
+                    ageCategory: p.ageCategory || ''
+                })) : passengers;
+            } catch (e) {
+                console.error("⚠️ passengers parse error:", e.message);
+            }
         }
 
-        await leadToUpdate.update({ numberOfPersons, passengers });
+        if (req.body.documents !== undefined) {
+            try {
+                const documentsMeta = JSON.parse(req.body.documents);
+                const files = req.files || [];
+                documents = documentsMeta
+                    .map((d, idx) => {
+                        const matchedFile = files.find(f => f.fieldname === `leadDoc_${idx}`);
+                        return {
+                            name: d.name || 'Document',
+                            url: matchedFile ? `/uploads/${matchedFile.filename}` : (d.url || '')
+                        };
+                    })
+                    .filter(d => d.url);
+            } catch (e) {
+                console.error("⚠️ documents parse error:", e.message);
+            }
+        }
+
+        await leadToUpdate.update({ 
+            numberOfPersons, 
+            passengers, 
+            followUpNotes, 
+            documents,
+            createdBy: leadToUpdate.createdBy || modifierName,
+            updatedBy: modifierName,
+            createdAtTime: leadToUpdate.createdAtTime || currentDateTime,
+            updatedAtTime: currentDateTime 
+        });
+
+        console.log("✅ Lead updated with updatedBy =", leadToUpdate.updatedBy, "| updatedAtTime =", leadToUpdate.updatedAtTime);
+
         res.json(leadToUpdate);
     } catch (err) {
         console.error("❌ Update Lead Error:", err);
@@ -449,7 +524,6 @@ app.put('/api/leads/:id', authenticateToken, upload.any(), async (req, res) => {
     }
 });
 
-// ✏️ Assign field — koi bhi kabhi bhi badal sakta hai, koi lock nahi
 app.patch('/api/leads/:id/assign', authenticateToken, async (req, res) => {
     try {
         const { field, value } = req.body;
@@ -462,7 +536,14 @@ app.patch('/api/leads/:id/assign', authenticateToken, async (req, res) => {
         const leadToUpdate = await LeadPSQL.findByPk(req.params.id);
         if (!leadToUpdate) return res.status(404).json({ error: "Lead not found!" });
 
-        await leadToUpdate.update({ [field]: value });
+        const modifierName = buildActorLabel(req);
+        const currentDateTime = getFormattedDateTime();
+        
+        await leadToUpdate.update({ 
+            [field]: value, 
+            updatedBy: modifierName, 
+            updatedAtTime: currentDateTime 
+        });
         res.json(leadToUpdate);
     } catch (err) {
         console.error("❌ Assignment Error:", err);
@@ -470,9 +551,8 @@ app.patch('/api/leads/:id/assign', authenticateToken, async (req, res) => {
     }
 });
 
-// 🔄 Status update — dropdown se turant save
-app.patch('/api/leads/:id/status', authenticateToken, [
-    body('status').isIn(['Pending', 'In Progress', 'Confirmed', 'Cancelled']).withMessage('Invalid status')
+app.patch('/api/leads/:id/source', authenticateToken, [
+    body('source').isIn(['Direct', 'Facebook', 'Referral', 'Walk-in', 'Website', 'Other']).withMessage('Invalid source')
 ], async (req, res) => {
     try {
         const errors = validationResult(req);
@@ -483,11 +563,18 @@ app.patch('/api/leads/:id/status', authenticateToken, [
         const leadToUpdate = await LeadPSQL.findByPk(req.params.id);
         if (!leadToUpdate) return res.status(404).json({ error: "Lead not found!" });
 
-        await leadToUpdate.update({ status: req.body.status });
+        const modifierName = buildActorLabel(req);
+        const currentDateTime = getFormattedDateTime();
+
+        await leadToUpdate.update({ 
+            source: req.body.source, 
+            updatedBy: modifierName, 
+            updatedAtTime: currentDateTime 
+        });
         res.json(leadToUpdate);
     } catch (err) {
-        console.error("❌ Status Update Error:", err);
-        res.status(500).json({ error: "Failed to update status" });
+        console.error("❌ Source Update Error:", err);
+        res.status(500).json({ error: "Failed to update source" });
     }
 });
 
