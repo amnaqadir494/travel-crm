@@ -1,4 +1,3 @@
-
 function clearAlerts() {
     document.getElementById('errorBox').style.display = 'none';
     document.getElementById('successBox').style.display = 'none';
@@ -9,7 +8,7 @@ document.getElementById('activateForm').addEventListener('submit', async (e) => 
     clearAlerts();
 
     const employeeId = document.getElementById('employeeId').value.trim();
-    const email = document.getElementById('activateEmail').value.trim();
+    const name = document.getElementById('activateName').value.trim();
     const newPassword = document.getElementById('newPassword').value;
     const confirmPassword = document.getElementById('confirmPassword').value;
 
@@ -23,7 +22,7 @@ document.getElementById('activateForm').addEventListener('submit', async (e) => 
         const res = await fetch('/api/auth/activate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ employeeId, email, newPassword })
+            body: JSON.stringify({ employeeId, name, newPassword })
         });
 
         const data = await res.json();

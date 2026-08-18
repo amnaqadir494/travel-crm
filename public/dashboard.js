@@ -84,6 +84,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             const editBtn = e.target.closest('.btn-edit-employee');
             if (editBtn) {
                 openEditEmployeeModal(editBtn.getAttribute('data-id'));
+                return;
+            }
+            const resetBtn = e.target.closest('.btn-reset-password');
+            if (resetBtn) {
+                resetEmployeePassword(resetBtn.getAttribute('data-id'), token);
             }
         });
     }
@@ -333,11 +338,13 @@ function renderEmployeesTable() {
         tr.innerHTML = `
             <td><strong>${escapeHTML(emp.employeeId)}</strong></td>
             <td>${escapeHTML(emp.name)}</td>
-            <td>${escapeHTML(emp.email)}</td>
+            <td>${escapeHTML(emp.phone || '-')}</td>
+            <td>${escapeHTML(emp.email || '-')}</td>
             <td>${escapeHTML(emp.department)}</td>
             <td>${statusBadge}</td>
             <td>
                 <button type="button" class="btn-edit btn-edit-employee" data-id="${escapeHTML(emp.id)}">Edit</button>
+                <button type="button" class="btn-reset btn-reset-password" data-id="${escapeHTML(emp.id)}">Reset Password</button>
                 <button type="button" class="btn-danger btn-delete-employee" data-id="${escapeHTML(emp.id)}">Delete</button>
             </td>
         `;
@@ -352,6 +359,7 @@ async function addEmployee(token) {
     successBox.style.display = 'none';
 
     const name = document.getElementById('empName').value;
+    const phone = document.getElementById('empPhone').value;
     const email = document.getElementById('empEmail').value;
     const department = document.getElementById('empDepartment').value;
 
@@ -359,7 +367,7 @@ async function addEmployee(token) {
         const res = await fetch('/api/admin/users', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ name, email, department })
+            body: JSON.stringify({ name, phone, email, department })
         });
 
         const data = await res.json();
@@ -370,9 +378,8 @@ async function addEmployee(token) {
         }
 
         document.getElementById('addEmployeeForm').reset();
-        successBox.innerText = `Employee successfully added!`;
+        successBox.innerText = `Employee added!`;
         successBox.style.display = 'block';
-        setTimeout(() => { successBox.style.display = 'none'; }, 3000);
 
         await fetchEmployees(token);
         renderEmployeesTable();
@@ -390,7 +397,8 @@ function openEditEmployeeModal(id) {
 
     currentEditingEmployeeId = id;
     document.getElementById('editEmpName').value = emp.name;
-    document.getElementById('editEmpEmail').value = emp.email;
+    document.getElementById('editEmpPhone').value = emp.phone || '';
+    document.getElementById('editEmpEmail').value = emp.email || '';
     document.getElementById('editEmpDepartment').value = emp.department;
     document.getElementById('editEmpMsg').style.display = 'none';
     document.getElementById('editEmployeeModal').style.display = 'flex';
@@ -403,6 +411,7 @@ async function saveEditedEmployee(token) {
     msgBox.style.display = 'none';
 
     const name = document.getElementById('editEmpName').value;
+    const phone = document.getElementById('editEmpPhone').value;
     const email = document.getElementById('editEmpEmail').value;
     const department = document.getElementById('editEmpDepartment').value;
 
@@ -410,7 +419,7 @@ async function saveEditedEmployee(token) {
         const res = await fetch(`/api/admin/users/${currentEditingEmployeeId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ name, email, department })
+            body: JSON.stringify({ name, phone, email, department })
         });
 
         const data = await res.json();
@@ -450,6 +459,30 @@ async function deleteEmployee(id, token) {
         }
     } catch (err) {
         console.error("Delete employee error:", err);
+    }
+}
+
+// 🔑 Password reset — employee dobara Activate Account se apna password set kar sakega
+async function resetEmployeePassword(id, token) {
+    if (!confirm("Kya aap is employee ka password reset karna chahte hain? Wo dobara 'Activate Account' se naya password set karenge.")) return;
+
+    try {
+        const res = await fetch(`/api/admin/users/${id}/reset-password`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+            alert(data.message);
+            await fetchEmployees(token);
+            renderEmployeesTable();
+        } else {
+            alert(data.error || 'Failed to reset password');
+        }
+    } catch (err) {
+        console.error("Reset password error:", err);
+        alert('Server error while resetting password.');
     }
 }
 
@@ -582,16 +615,6 @@ function renderLeads(leads, searchQuery = '') {
             });
         }
 
-        const createdAtStr = lead.createdAtTime || 'N/A';
-        const updatedAtStr = lead.updatedAtTime || 'N/A';
-        
-        passengersHtml += `
-            <div style="font-size: 10px; color: #4a5568; margin-top: 8px; border-top: 1px solid #e2e8f0; paddingTop: 4px; background: #edf2f7; padding: 4px; border-radius: 4px;">
-                <div><strong>Created:</strong> ${escapeHTML(lead.createdBy || 'System')} (${createdAtStr})</div>
-                <div><strong>Last Updated:</strong> ${escapeHTML(lead.updatedBy || 'System')} (${updatedAtStr})</div>
-            </div>
-        `;
-
         passengersHtml += `<button type="button" class="btn-primary btn-edit-passengers" data-id="${escapeHTML(lead.id)}" style="padding: 4px 10px; font-size: 11px; margin-top: 5px; cursor: pointer;">Edit / Upload Docs</button>`;
 
         tr.innerHTML = `
@@ -626,33 +649,6 @@ function openEditPassengersModal(leadId) {
 
     document.getElementById('modalNumPersons').value = currentCount;
     renderModalPassengerInputs(currentCount, lead.passengers || []);
-
-    let leadSummaryBox = document.getElementById('modalLeadSummaryBox');
-    if (!leadSummaryBox) {
-        leadSummaryBox = document.createElement('div');
-        leadSummaryBox.id = 'modalLeadSummaryBox';
-        const titleEl = document.querySelector('#editPassengersModal h3');
-        if (titleEl) titleEl.insertAdjacentElement('afterend', leadSummaryBox);
-    }
-    
-    const createdAtStr = lead.createdAtTime || 'N/A';
-    const updatedAtStr = lead.updatedAtTime || 'N/A';
-
-    leadSummaryBox.style.cssText = 'background: #f7fafc; border: 1px solid #cbd5e0; border-left: 4px solid #3182ce; padding: 10px 14px; border-radius: 6px; margin-bottom: 15px; font-size: 13px; color: #2d3748;';
-    leadSummaryBox.innerHTML = `
-        <div style="font-weight: bold; margin-bottom: 4px; color: #2b6cb0;">📋 Lead Details & Audit Trail</div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-            <div><strong>Name:</strong> ${escapeHTML(lead.name || 'N/A')}</div>
-            <div><strong>Email:</strong> ${escapeHTML(lead.email || 'N/A')}</div>
-            <div><strong>Phone:</strong> ${escapeHTML(lead.phone || 'N/A')}</div>
-            <div><strong>Destination:</strong> ${escapeHTML(lead.destination || 'N/A')}</div>
-            <div style="grid-column: span 2;"><strong>Source:</strong> ${escapeHTML(lead.source || 'Direct')}</div>
-            <div style="grid-column: span 2; border-top: 1px dashed #cbd5e0; margin-top: 4px; padding-top: 4px; font-size: 11px; color: #4a5568;">
-                <div><strong>Created By:</strong> ${escapeHTML(lead.createdBy || 'System')} at ${createdAtStr}</div>
-                <div><strong>Last Updated By:</strong> ${escapeHTML(lead.updatedBy || 'System')} at ${updatedAtStr}</div>
-            </div>
-        </div>
-    `;
 
     const notesContainer = document.getElementById('followUpNotesList');
     if (notesContainer) {
@@ -717,12 +713,6 @@ async function savePassengersFromModal(token) {
     const boxes = document.querySelectorAll('.modal-passenger-box');
     const formData = new FormData();
     formData.append('numberOfPersons', count);
-
-    // 🕒 Current logged-in user ka naam aur exact time fetch karein
-    const currentModifier = currentUser ? `${currentUser.name} (${currentUser.department})` : 'Unknown';
-    const currentDateTime = new Date().toLocaleString();
-    formData.append('updatedBy', currentModifier);
-    formData.append('updatedAtTime', currentDateTime);
 
     let followUpNotes = [];
     document.querySelectorAll('.followup-note-card').forEach(card => {
