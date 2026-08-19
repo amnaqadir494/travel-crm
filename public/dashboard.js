@@ -464,7 +464,7 @@ async function deleteEmployee(id, token) {
 
 // 🔑 Password reset — employee dobara Activate Account se apna password set kar sakega
 async function resetEmployeePassword(id, token) {
-    if (!confirm("Kya aap is employee ka password reset karna chahte hain? Wo dobara 'Activate Account' se naya password set karenge.")) return;
+    if (!confirm("Are you sure you want to reset the password.")) return;
 
     try {
         const res = await fetch(`/api/admin/users/${id}/reset-password`, {
