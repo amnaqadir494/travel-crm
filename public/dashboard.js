@@ -558,11 +558,19 @@ const FIELD_DEPARTMENT = {
     assignedTour: 'Tour'
 };
 
+function normalizeDept(str) {
+    return (str || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s*department\s*$/i, ''); // "Ticketing Department" -> "ticketing"
+}
+
 function buildAssignCell(lead, fieldKey) {
     const currentValue = lead[fieldKey] || '';
     const targetDept = FIELD_DEPARTMENT[fieldKey];
+    const targetDeptNormalized = normalizeDept(targetDept);
 
-    const relevantEmployees = EMPLOYEES.filter(emp => (emp.department || '').trim().toLowerCase() === targetDept.toLowerCase());
+    const relevantEmployees = EMPLOYEES.filter(emp => normalizeDept(emp.department) === targetDeptNormalized);
 
     let options = `<option value="">-- Unassigned --</option>`;
     relevantEmployees.forEach(emp => {
