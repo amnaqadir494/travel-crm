@@ -71,8 +71,8 @@ const sequelize = new Sequelize(process.env.DATABASE_URL || 'postgres://postgres
 
 const UserPSQL = sequelize.define('User', {
     name: { type: DataTypes.STRING, allowNull: false },
-    email: { type: DataTypes.STRING, allowNull: true, unique: true }, // 👈 Ab optional hai
-    phone: { type: DataTypes.STRING, allowNull: true }, // 👈 Naya field
+    email: { type: DataTypes.STRING, allowNull: true, unique: true }, 
+    phone: { type: DataTypes.STRING, allowNull: true }, 
     password: { type: DataTypes.STRING, allowNull: true },
     department: { type: DataTypes.STRING, allowNull: false }
 }, {
@@ -104,7 +104,6 @@ sequelize.authenticate()
     .then(async () => {
         console.log("✅ Connected to PostgreSQL Successfully");
 
-        // 🛠️ Columns/constraints ko sync se PEHLE theek kar dete hain, taake sync fail ho to bhi ye zaroor ho jaye
         try {
             await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "followUpNotes" JSON;');
             await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "documents" JSON;');
@@ -159,7 +158,7 @@ function parseEmployeeId(employeeId) {
 }
 
 // ==========================================
-// AUTH — LOGIN (Employee ID + Password)
+// AUTH — LOGIN
 // ==========================================
 app.post('/api/auth/login', async (req, res) => {
     try {
@@ -206,7 +205,7 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // ==========================================
-// ACCOUNT ACTIVATION — ab Naam + Employee ID se, email ki zaroorat nahi
+// ACCOUNT ACTIVATION
 // ==========================================
 app.post('/api/auth/activate', [
     body('employeeId').trim().notEmpty().withMessage('Employee ID is required'),
@@ -253,7 +252,7 @@ app.post('/api/auth/activate', [
 });
 
 // ==========================================
-// EMPLOYEES
+// EMPLOYEES & ASSIGNMENT DROPDOWNS API
 // ==========================================
 app.get('/api/employees', authenticateToken, async (req, res) => {
     try {
@@ -271,6 +270,45 @@ app.get('/api/employees', authenticateToken, async (req, res) => {
     } catch (err) {
         console.error("❌ Error fetching employees:", err);
         res.status(500).json({ error: "Failed to fetch employees" });
+    }
+});
+
+// Naya Endpoint for Lead Assignment Dropdowns based on exact requirements
+app.get('/api/employees/department/:dept', authenticateToken, async (req, res) => {
+    try {
+        const deptParam = req.params.dept;
+        let whereClause = {};
+
+        if (deptParam === 'Visa') {
+            whereClause = { department: 'Visa' };
+        } else if (deptParam === 'Ticketing') {
+            whereClause = { department: 'Ticketing/Flights' };
+        } else if (deptParam === 'Finance') {
+            whereClause = { department: 'Finance' };
+        } else if (deptParam === 'Tour') {
+            whereClause = { 
+                department: ['Domestic Group', 'International Group', 'International FIT', 'Religious Tours', 'Domestic FIT'] 
+            };
+        } else {
+            whereClause = { department: deptParam };
+        }
+
+        const users = await UserPSQL.findAll({ 
+            where: whereClause,
+            attributes: ['id', 'name', 'department'] 
+        });
+
+        const formatted = users.map(u => ({
+            id: u.id,
+            employeeId: buildEmployeeId(u.id),
+            name: u.name,
+            department: u.department
+        }));
+
+        res.json(formatted);
+    } catch (err) {
+        console.error("❌ Error fetching filtered employees:", err);
+        res.status(500).json({ error: "Failed to fetch employees for assignment" });
     }
 });
 
@@ -363,7 +401,6 @@ app.put('/api/admin/users/:id', authenticateToken, requireAdmin, [
     }
 });
 
-// 🔑 Admin password reset — employee ka password null kar deta hai, wo dobara Activate Account se naya set kar sakta hai
 app.post('/api/admin/users/:id/reset-password', authenticateToken, requireAdmin, async (req, res) => {
     try {
         const foundUser = await UserPSQL.findByPk(req.params.id);
@@ -371,7 +408,7 @@ app.post('/api/admin/users/:id/reset-password', authenticateToken, requireAdmin,
 
         await foundUser.update({ password: null });
         res.json({
-            message: `Password reset ho gaya! ${foundUser.name} (${buildEmployeeId(foundUser.id)}) ab "Activate Account" se dobara apna naya password set kar sakte hain — unhe unki Employee ID aur naam bata dein.`
+            message: `Password reset ho gaya! ${foundUser.name} (${buildEmployeeId(foundUser.id)}) ab "Activate Account" se dobara apna naya password set kar sakte hain.`
         });
     } catch (err) {
         console.error("❌ Reset Password Error:", err);
@@ -547,7 +584,7 @@ app.patch('/api/leads/:id/source', authenticateToken, [
 app.delete('/api/leads/:id', authenticateToken, requireAdmin, async (req, res) => {
     try {
         const deleted = await LeadPSQL.destroy({ where: { id: req.params.id } });
-        if (!deleted) return res.status(404).json({ error: "Lead not found!" });
+        if (!deleted) return res.status(404).json({ error: "Employee/Lead not found!" });
         res.json({ message: "Lead deleted successfully" });
     } catch (err) {
         console.error("❌ Delete Lead Error:", err);
