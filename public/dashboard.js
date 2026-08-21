@@ -551,11 +551,15 @@ function applySearchFilter() {
     renderLeads(filtered, query);
 }
 
-const FIELD_DEPARTMENT = {
-    assignedVisa: 'Visa',
-    assignedTicketing: 'Ticketing',
-    assignedFinance: 'Finance',
-    assignedTour: 'Tour'
+// ==========================================
+// 🔧 Assignment dropdown -> department mapping
+// Har assignment field ab EK ya ZYADA departments se employees dikhayega
+// ==========================================
+const FIELD_DEPARTMENTS = {
+    assignedVisa: ['Visa'],
+    assignedTicketing: ['Ticketing/Flights'],
+    assignedFinance: ['Finance'],
+    assignedTour: ['Domestic Group', 'International Group', 'International FIT', 'Religious Tours', 'Domestic FIT']
 };
 
 function normalizeDept(str) {
@@ -567,10 +571,10 @@ function normalizeDept(str) {
 
 function buildAssignCell(lead, fieldKey) {
     const currentValue = lead[fieldKey] || '';
-    const targetDept = FIELD_DEPARTMENT[fieldKey];
-    const targetDeptNormalized = normalizeDept(targetDept);
+    const targetDepts = FIELD_DEPARTMENTS[fieldKey] || [];
+    const targetDeptsNormalized = targetDepts.map(normalizeDept);
 
-    const relevantEmployees = EMPLOYEES.filter(emp => normalizeDept(emp.department) === targetDeptNormalized);
+    const relevantEmployees = EMPLOYEES.filter(emp => targetDeptsNormalized.includes(normalizeDept(emp.department)));
 
     let options = `<option value="">-- Unassigned --</option>`;
     relevantEmployees.forEach(emp => {
