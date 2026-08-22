@@ -1,8 +1,16 @@
 let currentUser = null;
 let allLeads = [];
 let EMPLOYEES = [];
+let NOTIFICATIONS = [];
 let currentEditingLeadId = null;
 let currentEditingEmployeeId = null;
+
+// 🏷️ Sab departments (tagging dropdown ke liye) — Employee form jese hi list
+const ALL_DEPARTMENTS = [
+    'Admin', 'Ticketing/Flights', 'Finance', 'Cordination', 'Domestic Group',
+    'Domestic FIT', 'International Group', 'International FIT', 'Visa',
+    'Marketing', 'Customer Support', 'Religious Tours', 'Corporate'
+];
 
 function escapeHTML(str) {
     if (!str) return '';
@@ -44,12 +52,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     injectAnalyticsUI();
 
-    setupToggleButton('toggleEmployeesBtn', 'employeeManagementCard');
-    setupToggleButton('toggleAddLeadBtn', 'addLeadCard');
-    setupToggleButton('toggleAnalyticsBtn', 'dashboardAnalyticsSection');
-    setupToggleButton('toggleLeadsBtn', 'leadsManagementCard');
+    setupSidebarNav();
 
     loadLeads(token);
+    initNotifications(token);
 
     document.getElementById('logoutBtn').addEventListener('click', () => {
         localStorage.clear();
@@ -64,6 +70,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById('searchName').addEventListener('input', () => {
         applySearchFilter();
     });
+
+    // ⬇ CSV Export buttons
+    const exportLeadsBtn = document.getElementById('exportLeadsCsvBtn');
+    if (exportLeadsBtn) exportLeadsBtn.addEventListener('click', exportLeadsCSV);
+
+    const exportEmpBtn = document.getElementById('exportEmployeesCsvBtn');
+    if (exportEmpBtn) exportEmpBtn.addEventListener('click', exportEmployeesCSV);
 
     const addEmployeeForm = document.getElementById('addEmployeeForm');
     if (addEmployeeForm) {
@@ -121,19 +134,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Modal section switching & actions
     document.addEventListener('click', (e) => {
         if (e.target && e.target.id === 'btnOpenTraveller') {
-            document.getElementById('travellerSection').style.display = 'block';
-            document.getElementById('followUpSection').style.display = 'none';
-            document.getElementById('documentSection').style.display = 'none';
+            showModalSection('travellerSection');
         }
         if (e.target && e.target.id === 'btnOpenFollowUp') {
-            document.getElementById('travellerSection').style.display = 'none';
-            document.getElementById('followUpSection').style.display = 'block';
-            document.getElementById('documentSection').style.display = 'none';
+            showModalSection('followUpSection');
         }
         if (e.target && e.target.id === 'btnOpenDocument') {
-            document.getElementById('travellerSection').style.display = 'none';
-            document.getElementById('followUpSection').style.display = 'none';
-            document.getElementById('documentSection').style.display = 'block';
+            showModalSection('documentSection');
+        }
+        if (e.target && e.target.id === 'btnOpenTag') {
+            showModalSection('tagSection');
         }
 
         if (e.target.classList.contains('btn-add-doc-row')) {
@@ -162,6 +172,29 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
             return;
         }
+
+        // 🔔 Bell icon click -> toggle notifications panel
+        const bellBtn = e.target.closest('#notifBellBtn');
+        if (bellBtn) {
+            toggleNotificationsPanel();
+            return;
+        }
+        // Click outside panel closes it
+        const panel = document.getElementById('notificationsPanel');
+        if (panel && panel.style.display === 'block' && !e.target.closest('#notificationsPanel') && !e.target.closest('#notifBellBtn')) {
+            panel.style.display = 'none';
+        }
+
+        const notifItem = e.target.closest('.notif-item');
+        if (notifItem) {
+            const notifId = notifItem.getAttribute('data-id');
+            markNotificationRead(notifId, token);
+        }
+
+        if (e.target && e.target.id === 'closeNotifPopupBtn') {
+            document.getElementById('notificationPopupModal').style.display = 'none';
+            markAllNotificationsRead(token);
+        }
     });
 
     const addNoteBtn = document.getElementById('btnAddFollowUpNote');
@@ -176,6 +209,21 @@ document.addEventListener("DOMContentLoaded", async () => {
             const timeStr = new Date().toLocaleString();
             appendFollowUpNoteCard(text, timeStr);
             textarea.value = '';
+        });
+    }
+
+    // 🏷️ Tag section: department change -> populate employee dropdown
+    const tagDeptSelect = document.getElementById('tagDepartmentSelect');
+    if (tagDeptSelect) {
+        tagDeptSelect.addEventListener('change', () => {
+            populateTagEmployeeSelect(tagDeptSelect.value);
+        });
+    }
+
+    const sendTagBtn = document.getElementById('btnSendTag');
+    if (sendTagBtn) {
+        sendTagBtn.addEventListener('click', () => {
+            sendLeadTag(token);
         });
     }
 
@@ -205,15 +253,47 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 });
 
-function setupToggleButton(btnId, sectionId) {
-    const btn = document.getElementById(btnId);
-    const section = document.getElementById(sectionId);
-    if (!btn || !section) return;
-
-    btn.addEventListener('click', () => {
-        const isHidden = section.style.display === 'none' || getComputedStyle(section).display === 'none';
-        section.style.setProperty('display', isHidden ? 'block' : 'none', 'important');
+function showModalSection(sectionId) {
+    ['travellerSection', 'followUpSection', 'documentSection', 'tagSection'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = (id === sectionId) ? 'block' : 'none';
     });
+}
+
+// ==========================================
+// 🧭 SIDEBAR NAVIGATION (Facebook-style left sidebar)
+// ==========================================
+function setupSidebarNav() {
+    const navButtons = document.querySelectorAll('.sidebar-nav-item[data-section]');
+    navButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            navButtons.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            const sectionId = btn.getAttribute('data-section');
+            ['employeeManagementCard', 'addLeadCard', 'dashboardAnalyticsSection', 'leadsManagementCard'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.setProperty('display', id === sectionId ? 'block' : 'none', 'important');
+            });
+        });
+    });
+
+    // Default section jo pehle khule
+    const defaultBtn = document.querySelector('.sidebar-nav-item[data-section="leadsManagementCard"]');
+    if (defaultBtn) defaultBtn.click();
+
+    // Sidebar search box -> lead/employee search se link
+    const sidebarSearch = document.getElementById('sidebarSearchInput');
+    if (sidebarSearch) {
+        sidebarSearch.addEventListener('input', () => {
+            const query = sidebarSearch.value.trim();
+            // Leads section khol do aur search chala do
+            const leadsBtn = document.querySelector('.sidebar-nav-item[data-section="leadsManagementCard"]');
+            if (leadsBtn && query) leadsBtn.click();
+            document.getElementById('searchName').value = query;
+            applySearchFilter();
+        });
+    }
 }
 
 function injectAnalyticsUI() {
@@ -462,7 +542,6 @@ async function deleteEmployee(id, token) {
     }
 }
 
-// 🔑 Password reset — employee dobara Activate Account se apna password set kar sakega
 async function resetEmployeePassword(id, token) {
     if (!confirm("Are you sure you want to reset the password.")) return;
 
@@ -551,10 +630,6 @@ function applySearchFilter() {
     renderLeads(filtered, query);
 }
 
-// ==========================================
-// 🔧 Assignment dropdown -> department mapping
-// Har assignment field ab EK ya ZYADA departments se employees dikhayega
-// ==========================================
 const FIELD_DEPARTMENTS = {
     assignedVisa: ['Visa'],
     assignedTicketing: ['Ticketing/Flights'],
@@ -566,7 +641,7 @@ function normalizeDept(str) {
     return (str || '')
         .trim()
         .toLowerCase()
-        .replace(/\s*department\s*$/i, ''); // "Ticketing Department" -> "ticketing"
+        .replace(/\s*department\s*$/i, '');
 }
 
 function buildAssignCell(lead, fieldKey) {
@@ -594,7 +669,7 @@ function renderLeads(leads, searchQuery = '') {
     tbody.innerHTML = '';
 
     if (leads.length === 0) {
-        const colCount = currentUser.department === 'Admin' ? 11 : 10;
+        const colCount = currentUser.department === 'Admin' ? 12 : 11;
         tbody.innerHTML = `<tr><td colspan="${colCount}" style="text-align: center; padding: 20px; color: #718096; font-weight: 600;">No results found</td></tr>`;
         return;
     }
@@ -627,7 +702,12 @@ function renderLeads(leads, searchQuery = '') {
             });
         }
 
-        passengersHtml += `<button type="button" class="btn-primary btn-edit-passengers" data-id="${escapeHTML(lead.id)}" style="padding: 4px 10px; font-size: 11px; margin-top: 5px; cursor: pointer;">Edit / Upload Docs</button>`;
+        passengersHtml += `<button type="button" class="btn-primary btn-edit-passengers" data-id="${escapeHTML(lead.id)}" style="padding: 4px 10px; font-size: 11px; margin-top: 5px; cursor: pointer;">Edit / Upload Docs / Tag</button>`;
+
+        // 🏷️ Current tag / handover cell
+        const tagCell = lead.currentTagName
+            ? `<div style="font-size: 12px;"><strong>${escapeHTML(lead.currentTagName)}</strong><br><span style="color:#718096;">${escapeHTML(lead.currentTagDepartment || '')}</span></div>`
+            : `<span style="color:#a0aec0; font-size: 12px;">Not tagged</span>`;
 
         tr.innerHTML = `
             <td style="${nameCellStyle}">${escapeHTML(lead.name)}</td>
@@ -640,6 +720,7 @@ function renderLeads(leads, searchQuery = '') {
             <td>${buildAssignCell(lead, 'assignedTicketing')}</td>
             <td>${buildAssignCell(lead, 'assignedFinance')}</td>
             <td>${buildAssignCell(lead, 'assignedTour')}</td>
+            <td>${tagCell}</td>
             <td style="display: ${isAdmin ? 'table-cell' : 'none'};">
                 ${isAdmin ? `<button class="btn-danger" data-id="${escapeHTML(lead.id)}">Delete</button>` : ''}
             </td>
@@ -648,16 +729,93 @@ function renderLeads(leads, searchQuery = '') {
     });
 }
 
+// ==========================================
+// 🏷️ TAGGING / HANDOVER UI
+// ==========================================
+function populateTagEmployeeSelect(department) {
+    const empSelect = document.getElementById('tagEmployeeSelect');
+    if (!empSelect) return;
+    empSelect.innerHTML = '<option value="">-- Select Employee --</option>';
+
+    if (!department) return;
+    const relevant = EMPLOYEES.filter(e => normalizeDept(e.department) === normalizeDept(department) && e.email);
+    relevant.forEach(emp => {
+        empSelect.innerHTML += `<option value="${escapeHTML(emp.email)}">${escapeHTML(emp.name)}</option>`;
+    });
+    if (relevant.length === 0) {
+        empSelect.innerHTML += `<option value="" disabled>No employees with email in this department</option>`;
+    }
+}
+
+function renderTagHistory(tagHistory) {
+    const container = document.getElementById('tagHistoryList');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (!Array.isArray(tagHistory) || tagHistory.length === 0) {
+        container.innerHTML = '<p style="font-size: 12px; color: #718096;">Koi tagging history nahi hai abhi.</p>';
+        return;
+    }
+
+    tagHistory.forEach(entry => {
+        const timeStr = entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '';
+        const card = document.createElement('div');
+        card.style.cssText = 'background: #ebf8ff; border-left: 4px solid #3182ce; padding: 8px 10px; border-radius: 6px; margin-bottom: 6px; font-size: 12px;';
+        card.innerHTML = `
+            <div style="color:#718096; margin-bottom:2px;">🕒 ${escapeHTML(timeStr)}</div>
+            <div><strong>${escapeHTML(entry.fromName || '')}</strong> ➜ <strong>${escapeHTML(entry.toName || '')}</strong> <span style="color:#2b6cb0;">(${escapeHTML(entry.department || '')})</span></div>
+            ${entry.note ? `<div style="margin-top:2px; color:#4a5568;">${escapeHTML(entry.note)}</div>` : ''}
+        `;
+        container.appendChild(card);
+    });
+}
+
+async function sendLeadTag(token) {
+    if (!currentEditingLeadId) return;
+
+    const department = document.getElementById('tagDepartmentSelect').value;
+    const toEmail = document.getElementById('tagEmployeeSelect').value;
+    const note = document.getElementById('tagNoteText').value.trim();
+    const msgBox = document.getElementById('tagMsg');
+    msgBox.style.display = 'none';
+
+    if (!department || !toEmail) {
+        msgBox.innerText = 'Department aur Employee dono select karna zaroori hai.';
+        msgBox.style.display = 'block';
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/leads/${currentEditingLeadId}/tag`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ toEmail, department, note })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            msgBox.innerText = data.error || 'Tag karne mein masla aaya.';
+            msgBox.style.display = 'block';
+            return;
+        }
+
+        document.getElementById('tagNoteText').value = '';
+        renderTagHistory(data.tagHistory);
+        await loadLeads(token);
+    } catch (err) {
+        console.error("Tag lead error:", err);
+        msgBox.innerText = 'Server error while tagging lead.';
+        msgBox.style.display = 'block';
+    }
+}
+
 function openEditPassengersModal(leadId) {
     let lead = allLeads.find(l => String(l.id) === String(leadId));
-    if (!lead) lead = { id: leadId, passengers: [], followUpNotes: [], documents: [] };
+    if (!lead) lead = { id: leadId, passengers: [], followUpNotes: [], documents: [], tagHistory: [] };
 
     currentEditingLeadId = leadId;
     const currentCount = lead.numberOfPersons || (lead.passengers ? lead.passengers.length : 1);
 
-    document.getElementById('travellerSection').style.display = 'none';
-    document.getElementById('followUpSection').style.display = 'none';
-    document.getElementById('documentSection').style.display = 'none';
+    showModalSection(null); // sab sections hide kar do, user button click kare
 
     document.getElementById('modalNumPersons').value = currentCount;
     renderModalPassengerInputs(currentCount, lead.passengers || []);
@@ -681,6 +839,14 @@ function openEditPassengersModal(leadId) {
             docContainer.innerHTML = '<p class="no-docs-text" style="font-size: 12px; color: #718096; margin: 4px 0;">No documents</p>';
         }
     }
+
+    // 🏷️ Tag section reset
+    const tagDeptSelect = document.getElementById('tagDepartmentSelect');
+    if (tagDeptSelect) tagDeptSelect.value = '';
+    populateTagEmployeeSelect('');
+    document.getElementById('tagNoteText').value = '';
+    document.getElementById('tagMsg').style.display = 'none';
+    renderTagHistory(lead.tagHistory || []);
 
     document.getElementById('editPassengersModal').style.display = 'flex';
 }
@@ -855,5 +1021,170 @@ async function deleteLead(id, token) {
         }
     } catch (err) {
         console.error("Delete error:", err);
+    }
+}
+
+// ==========================================
+// ⬇ CSV EXPORT
+// ==========================================
+function csvEscape(val) {
+    if (val === null || val === undefined) val = '';
+    val = String(val).replace(/"/g, '""');
+    if (/[",\n]/.test(val)) val = `"${val}"`;
+    return val;
+}
+
+function convertToCSV(rows, headers) {
+    const headerRow = headers.map(h => csvEscape(h.label)).join(',');
+    const dataRows = rows.map(row => headers.map(h => csvEscape(h.value(row))).join(','));
+    return [headerRow, ...dataRows].join('\n');
+}
+
+function downloadCSV(filename, csvContent) {
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+}
+
+function exportLeadsCSV() {
+    const headers = [
+        { label: 'Name', value: l => l.name },
+        { label: 'Email', value: l => l.email },
+        { label: 'Phone', value: l => l.phone },
+        { label: 'Destination', value: l => l.destination },
+        { label: 'Source', value: l => l.source },
+        { label: 'Persons', value: l => l.numberOfPersons },
+        { label: 'Visa Assigned', value: l => l.assignedVisa || '' },
+        { label: 'Ticketing Assigned', value: l => l.assignedTicketing || '' },
+        { label: 'Finance Assigned', value: l => l.assignedFinance || '' },
+        { label: 'Tour Assigned', value: l => l.assignedTour || '' },
+        { label: 'Current Tag Department', value: l => l.currentTagDepartment || '' },
+        { label: 'Currently Tagged To', value: l => l.currentTagName || '' }
+    ];
+    const csv = convertToCSV(allLeads, headers);
+    downloadCSV(`leads_export_${Date.now()}.csv`, csv);
+}
+
+function exportEmployeesCSV() {
+    const headers = [
+        { label: 'Employee ID', value: e => e.employeeId },
+        { label: 'Name', value: e => e.name },
+        { label: 'Phone', value: e => e.phone || '' },
+        { label: 'Email', value: e => e.email || '' },
+        { label: 'Department', value: e => e.department },
+        { label: 'Status', value: e => e.activated ? 'Activated' : 'Pending' }
+    ];
+    const csv = convertToCSV(EMPLOYEES, headers);
+    downloadCSV(`employees_export_${Date.now()}.csv`, csv);
+}
+
+// ==========================================
+// 🔔 NOTIFICATIONS — bell icon + popup jab koi tag kare
+// ==========================================
+async function initNotifications(token) {
+    await fetchNotifications(token);
+    // Har 45 second mein naya check karo
+    setInterval(() => fetchNotifications(token), 45000);
+}
+
+async function fetchNotifications(token) {
+    try {
+        const res = await fetch('/api/notifications', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const hadUnreadBefore = NOTIFICATIONS.some(n => !n.isRead);
+        NOTIFICATIONS = data;
+        renderNotificationBadge();
+        renderNotificationsPanel(token);
+
+        const unread = NOTIFICATIONS.filter(n => !n.isRead);
+        // Popup sirf pehli dafa unread milne par dikhao (login ke waqt)
+        if (unread.length > 0 && !window.__notifPopupShown) {
+            window.__notifPopupShown = true;
+            showNotificationPopup(unread);
+        }
+    } catch (err) {
+        console.error("Notifications fetch error:", err);
+    }
+}
+
+function renderNotificationBadge() {
+    const badge = document.getElementById('notifBadge');
+    if (!badge) return;
+    const unreadCount = NOTIFICATIONS.filter(n => !n.isRead).length;
+    if (unreadCount > 0) {
+        badge.textContent = unreadCount > 9 ? '9+' : unreadCount;
+        badge.style.display = 'inline-block';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function renderNotificationsPanel() {
+    const panel = document.getElementById('notificationsPanel');
+    if (!panel) return;
+
+    if (NOTIFICATIONS.length === 0) {
+        panel.innerHTML = '<div style="padding: 15px; font-size: 13px; color: #718096;">Koi notification nahi.</div>';
+        return;
+    }
+
+    panel.innerHTML = NOTIFICATIONS.map(n => `
+        <div class="notif-item" data-id="${escapeHTML(n.id)}" style="padding: 10px 12px; border-bottom: 1px solid #edf2f7; cursor: pointer; background: ${n.isRead ? '#fff' : '#ebf8ff'};">
+            <div style="font-size: 13px; color: #2d3748;">${escapeHTML(n.message)}</div>
+            <div style="font-size: 11px; color: #a0aec0; margin-top: 3px;">${n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}</div>
+        </div>
+    `).join('');
+}
+
+function toggleNotificationsPanel() {
+    const panel = document.getElementById('notificationsPanel');
+    if (!panel) return;
+    panel.style.display = (panel.style.display === 'block') ? 'none' : 'block';
+}
+
+function showNotificationPopup(unreadNotifications) {
+    const modal = document.getElementById('notificationPopupModal');
+    const list = document.getElementById('notificationPopupList');
+    if (!modal || !list) return;
+
+    list.innerHTML = unreadNotifications.map(n => `
+        <div style="padding: 10px 12px; border-left: 4px solid #3182ce; background: #ebf8ff; border-radius: 6px; margin-bottom: 8px;">
+            <div style="font-size: 13px; color: #2d3748;">${escapeHTML(n.message)}</div>
+            <div style="font-size: 11px; color: #718096; margin-top: 3px;">${n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}</div>
+        </div>
+    `).join('');
+
+    modal.style.display = 'flex';
+}
+
+async function markNotificationRead(id, token) {
+    try {
+        await fetch(`/api/notifications/${id}/read`, {
+            method: 'PATCH',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        await fetchNotifications(token);
+    } catch (err) {
+        console.error("Mark read error:", err);
+    }
+}
+
+async function markAllNotificationsRead(token) {
+    try {
+        await fetch('/api/notifications/read-all', {
+            method: 'PATCH',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        await fetchNotifications(token);
+    } catch (err) {
+        console.error("Mark all read error:", err);
     }
 }

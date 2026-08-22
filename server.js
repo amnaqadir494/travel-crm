@@ -72,7 +72,7 @@ const sequelize = new Sequelize(process.env.DATABASE_URL || 'postgres://postgres
 const UserPSQL = sequelize.define('User', {
     name: { type: DataTypes.STRING, allowNull: false },
     email: { type: DataTypes.STRING, allowNull: true, unique: true }, // 👈 Ab optional hai
-    phone: { type: DataTypes.STRING, allowNull: true }, // 👈 Naya field
+    phone: { type: DataTypes.STRING, allowNull: true },
     password: { type: DataTypes.STRING, allowNull: true },
     department: { type: DataTypes.STRING, allowNull: false }
 }, {
@@ -94,9 +94,29 @@ const LeadPSQL = sequelize.define('Lead', {
     assignedVisa: { type: DataTypes.STRING },
     assignedTicketing: { type: DataTypes.STRING },
     assignedFinance: { type: DataTypes.STRING },
-    assignedTour: { type: DataTypes.STRING }
+    assignedTour: { type: DataTypes.STRING },
+    // 🏷️ NAYE FIELDS — Tagging / Handover chain ke liye
+    tagHistory: { type: DataTypes.JSON, defaultValue: [] },
+    currentTagDepartment: { type: DataTypes.STRING },
+    currentTagEmail: { type: DataTypes.STRING },
+    currentTagName: { type: DataTypes.STRING }
 }, {
     tableName: 'Leads',
+    timestamps: false
+});
+
+// 🔔 NAYA MODEL — Notifications (jab kisi employee ko tag kiya jaye)
+const NotificationPSQL = sequelize.define('Notification', {
+    recipientEmail: { type: DataTypes.STRING, allowNull: false },
+    leadId: { type: DataTypes.INTEGER },
+    leadName: { type: DataTypes.STRING },
+    message: { type: DataTypes.STRING },
+    department: { type: DataTypes.STRING },
+    taggedByName: { type: DataTypes.STRING },
+    isRead: { type: DataTypes.BOOLEAN, defaultValue: false },
+    createdAt: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
+}, {
+    tableName: 'Notifications',
     timestamps: false
 });
 
@@ -104,10 +124,13 @@ sequelize.authenticate()
     .then(async () => {
         console.log("✅ Connected to PostgreSQL Successfully");
 
-        // 🛠️ Columns/constraints ko sync se PEHLE theek kar dete hain, taake sync fail ho to bhi ye zaroor ho jaye
         try {
             await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "followUpNotes" JSON;');
             await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "documents" JSON;');
+            await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "tagHistory" JSON;');
+            await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "currentTagDepartment" VARCHAR(255);');
+            await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "currentTagEmail" VARCHAR(255);');
+            await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "currentTagName" VARCHAR(255);');
             await sequelize.query('ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "phone" VARCHAR(255);');
             await sequelize.query('ALTER TABLE "users" ALTER COLUMN "email" DROP NOT NULL;');
             console.log("✅ All columns/constraints verified/added successfully via code");
@@ -206,7 +229,7 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // ==========================================
-// ACCOUNT ACTIVATION — ab Naam + Employee ID se, email ki zaroorat nahi
+// ACCOUNT ACTIVATION
 // ==========================================
 app.post('/api/auth/activate', [
     body('employeeId').trim().notEmpty().withMessage('Employee ID is required'),
@@ -363,7 +386,6 @@ app.put('/api/admin/users/:id', authenticateToken, requireAdmin, [
     }
 });
 
-// 🔑 Admin password reset — employee ka password null kar deta hai, wo dobara Activate Account se naya set kar sakta hai
 app.post('/api/admin/users/:id/reset-password', authenticateToken, requireAdmin, async (req, res) => {
     try {
         const foundUser = await UserPSQL.findByPk(req.params.id);
@@ -429,7 +451,19 @@ app.post('/api/leads', authenticateToken, upload.any(), [
             numberOfPersons,
             passengers: passengersMeta,
             followUpNotes: [],
-            documents: []
+            documents: [],
+            tagHistory: [{
+                fromName: req.user.name,
+                fromEmail: req.user.email,
+                toName: req.user.name,
+                toEmail: req.user.email,
+                department: req.user.department,
+                note: 'Lead created',
+                timestamp: new Date().toISOString()
+            }],
+            currentTagDepartment: req.user.department,
+            currentTagEmail: req.user.email,
+            currentTagName: req.user.name
         });
 
         res.status(201).json(newLead);
@@ -544,6 +578,64 @@ app.patch('/api/leads/:id/source', authenticateToken, [
     }
 });
 
+// ==========================================
+// 🏷️ TAG / HANDOVER — Lead ko kisi employee/department ko tag karna
+// Chain: Sales ne Finance ko tag kia -> Finance ne Visa ko tag kia -> waghera
+// ==========================================
+app.post('/api/leads/:id/tag', authenticateToken, [
+    body('toEmail').isEmail().withMessage('Valid employee email required (employee ka email set hona zaroori hai)'),
+    body('department').notEmpty().withMessage('Department is required')
+], async (req, res) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ error: errors.array().map(e => e.msg).join(', ') });
+        }
+
+        const lead = await LeadPSQL.findByPk(req.params.id);
+        if (!lead) return res.status(404).json({ error: "Lead not found!" });
+
+        const { toEmail, department, note } = req.body;
+        const toUser = await UserPSQL.findOne({ where: { email: toEmail.toLowerCase().trim() } });
+        if (!toUser) return res.status(404).json({ error: "Target employee not found (unka email system mein set hona chahiye)." });
+
+        const historyEntry = {
+            fromName: req.user.name,
+            fromEmail: req.user.email,
+            toName: toUser.name,
+            toEmail: toUser.email,
+            department,
+            note: note || '',
+            timestamp: new Date().toISOString()
+        };
+
+        const existingHistory = Array.isArray(lead.tagHistory) ? lead.tagHistory : [];
+        existingHistory.push(historyEntry);
+
+        await lead.update({
+            tagHistory: existingHistory,
+            currentTagDepartment: department,
+            currentTagEmail: toUser.email,
+            currentTagName: toUser.name
+        });
+
+        // 🔔 Notification banao target employee ke liye
+        await NotificationPSQL.create({
+            recipientEmail: toUser.email,
+            leadId: lead.id,
+            leadName: lead.name,
+            message: `${req.user.name} ne aap ko lead "${lead.name}" (${department}) ke liye tag kiya hai.`,
+            department,
+            taggedByName: req.user.name
+        });
+
+        res.json(lead);
+    } catch (err) {
+        console.error("❌ Tag Lead Error:", err);
+        res.status(500).json({ error: "Failed to tag lead" });
+    }
+});
+
 app.delete('/api/leads/:id', authenticateToken, requireAdmin, async (req, res) => {
     try {
         const deleted = await LeadPSQL.destroy({ where: { id: req.params.id } });
@@ -552,6 +644,51 @@ app.delete('/api/leads/:id', authenticateToken, requireAdmin, async (req, res) =
     } catch (err) {
         console.error("❌ Delete Lead Error:", err);
         res.status(500).json({ error: "Failed to delete lead" });
+    }
+});
+
+// ==========================================
+// 🔔 NOTIFICATIONS — Tagged employee ke liye popup/bell
+// ==========================================
+app.get('/api/notifications', authenticateToken, async (req, res) => {
+    try {
+        if (!req.user.email) return res.json([]); // employee ka email set nahi
+        const notifications = await NotificationPSQL.findAll({
+            where: { recipientEmail: req.user.email },
+            order: [['id', 'DESC']],
+            limit: 50
+        });
+        res.json(notifications);
+    } catch (err) {
+        console.error("❌ Fetch Notifications Error:", err);
+        res.status(500).json({ error: "Failed to fetch notifications" });
+    }
+});
+
+app.patch('/api/notifications/:id/read', authenticateToken, async (req, res) => {
+    try {
+        const notif = await NotificationPSQL.findByPk(req.params.id);
+        if (!notif || notif.recipientEmail !== req.user.email) {
+            return res.status(404).json({ error: "Notification not found" });
+        }
+        await notif.update({ isRead: true });
+        res.json(notif);
+    } catch (err) {
+        console.error("❌ Mark Read Error:", err);
+        res.status(500).json({ error: "Failed to update notification" });
+    }
+});
+
+app.patch('/api/notifications/read-all', authenticateToken, async (req, res) => {
+    try {
+        await NotificationPSQL.update(
+            { isRead: true },
+            { where: { recipientEmail: req.user.email, isRead: false } }
+        );
+        res.json({ message: "All marked as read" });
+    } catch (err) {
+        console.error("❌ Mark All Read Error:", err);
+        res.status(500).json({ error: "Failed to update notifications" });
     }
 });
 

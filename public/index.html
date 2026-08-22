@@ -22,7 +22,7 @@
         }
         .admin-only { display: none !important; }
         * { box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f6f9; }
+        body { font-family: Arial, sans-serif; margin: 0; background-color: #f0f2f5; }
         .card { background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
         .header { display: flex; justify-content: space-between; align-items: center; }
         .form-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -38,6 +38,7 @@
         .btn-edit { background-color: #3182ce; color: white; }
         .btn-reset { background-color: #d69e2e; color: white; }
         .btn-logout { background-color: #6c757d; color: white; }
+        .btn-export { background-color: #38a169; color: white; }
         .msg { padding: 10px; border-radius: 5px; font-size: 13px; margin-bottom: 12px; display: none; }
         .msg-error { background: #fed7d7; color: #9b2c2c; }
         .msg-success { background: #c6f6d5; color: #22543d; }
@@ -45,22 +46,98 @@
         .emp-table td, .emp-table th { padding: 8px; font-size: 13px; }
         .badge-activated { background: #c6f6d5; color: #22543d; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
         .badge-pending { background: #feebc8; color: #7b341e; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
-        .toggle-btn { background: #229b9e; color: white; padding: 12px 18px; font-size: 14px; font-weight: 600; border-radius: 6px; }
-        .toggle-btn:hover { background: #1b7f82; }
-        .toggle-bar { display: flex; gap: 12px; flex-wrap: wrap; }
+        .section-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+
+        /* ================= SIDEBAR LAYOUT ================= */
+        .app-layout { display: flex; min-height: 100vh; }
+
+        .sidebar {
+            width: 260px;
+            flex-shrink: 0;
+            background: #fff;
+            border-right: 1px solid #dde1e6;
+            padding: 14px 10px;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .sidebar-top { display: flex; align-items: center; gap: 10px; padding: 4px 8px 14px 8px; }
+        .sidebar-top img { width: 38px; height: 38px; border-radius: 8px; object-fit: contain; }
+        .sidebar-top .brand-name { font-weight: 700; font-size: 15px; color: #1c1e21; }
+
+        .sidebar-search {
+            display: flex; align-items: center; gap: 8px;
+            background: #f0f2f5; border-radius: 20px; padding: 8px 12px;
+            margin-bottom: 14px;
+        }
+        .sidebar-search input {
+            border: none; background: transparent; padding: 0; font-size: 14px; outline: none;
+        }
+        .sidebar-search span { font-size: 15px; color: #65676b; }
+
+        .sidebar-nav-item {
+            display: flex; align-items: center; gap: 12px;
+            padding: 10px 10px; border-radius: 8px; margin-bottom: 4px;
+            cursor: pointer; color: #050505; font-weight: 600; font-size: 14px;
+            background: transparent; border: none; width: 100%; text-align: left;
+        }
+        .sidebar-nav-item:hover { background: #f0f2f5; }
+        .sidebar-nav-item.active { background: #e7f3ff; color: #1877f2; }
+        .sidebar-nav-item .icon { font-size: 18px; width: 24px; text-align: center; }
+
+        .sidebar-divider { height: 1px; background: #dde1e6; margin: 10px 0; }
+
+        .sidebar-user {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 8px 10px; border-radius: 8px; background: #f0f2f5; margin-top: 10px;
+        }
+        .sidebar-user-name { font-size: 13px; font-weight: 600; color: #1c1e21; }
+
+        .main-content { flex: 1; padding: 20px; min-width: 0; }
+
+        /* ================= NOTIFICATIONS ================= */
+        .notif-bell-wrap { position: relative; }
+        #notifBellBtn {
+            background: #f0f2f5; border: none; border-radius: 50%; width: 40px; height: 40px;
+            font-size: 18px; cursor: pointer; position: relative; display: flex;
+            align-items: center; justify-content: center;
+        }
+        #notifBadge {
+            display: none; position: absolute; top: -4px; right: -4px;
+            background: #e53e3e; color: white; font-size: 10px; font-weight: 700;
+            border-radius: 10px; padding: 1px 5px; min-width: 16px; text-align: center;
+        }
+        #notificationsPanel {
+            display: none; position: absolute; top: 48px; right: 0; width: 320px;
+            max-height: 400px; overflow-y: auto; background: #fff; border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15); z-index: 500;
+        }
     </style>
 </head>
 <body>
 
-    <!-- Edit Passengers / Manage Lead Modal with 3 Action Buttons -->
+    <!-- 🔔 Notification Popup — jab koi employee ko tag kare, dashboard khulte hi yeh dikhta hai -->
+    <div id="notificationPopupModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1100; justify-content: center; align-items: center;">
+        <div style="background: white; padding: 22px; border-radius: 8px; width: 420px; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h3 style="margin-top: 0; margin-bottom: 12px; color: #2d3748;">🔔 Naye Tags / Assignments</h3>
+            <div id="notificationPopupList"></div>
+            <div style="margin-top: 15px; display: flex; justify-content: flex-end;">
+                <button type="button" id="closeNotifPopupBtn" style="padding: 8px 15px; background: #3182ce; color: white; border: none; border-radius: 4px; cursor: pointer;">Sab Read Mark Karke Band Karein</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Passengers / Manage Lead Modal with 4 Action Buttons -->
     <div id="editPassengersModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
         <div style="background: white; padding: 25px; border-radius: 8px; width: 650px; max-height: 85vh; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
             <h3 style="margin-top: 0; margin-bottom: 15px; color: #2d3748;">Manage Lead Details</h3>
 
-            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-                <button type="button" id="btnOpenTraveller" class="btn-primary" style="flex: 1; padding: 10px; cursor: pointer; font-weight: bold;">Add Traveller</button>
-                <button type="button" id="btnOpenFollowUp" class="btn-primary" style="flex: 1; padding: 10px; cursor: pointer; font-weight: bold; background: #d69e2e;">Add Follow Up</button>
-                <button type="button" id="btnOpenDocument" class="btn-primary" style="flex: 1; padding: 10px; cursor: pointer; font-weight: bold; background: #38a169;">Add Document</button>
+            <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                <button type="button" id="btnOpenTraveller" class="btn-primary" style="flex: 1; min-width: 120px; padding: 10px; cursor: pointer; font-weight: bold;">Add Traveller</button>
+                <button type="button" id="btnOpenFollowUp" class="btn-primary" style="flex: 1; min-width: 120px; padding: 10px; cursor: pointer; font-weight: bold; background: #d69e2e;">Add Follow Up</button>
+                <button type="button" id="btnOpenDocument" class="btn-primary" style="flex: 1; min-width: 120px; padding: 10px; cursor: pointer; font-weight: bold; background: #38a169;">Add Document</button>
+                <button type="button" id="btnOpenTag" class="btn-primary" style="flex: 1; min-width: 120px; padding: 10px; cursor: pointer; font-weight: bold; background: #805ad5;">🏷️ Tag / Handover</button>
             </div>
 
             <div id="travellerSection" style="display: none; border-top: 1px solid #e2e8f0; padding-top: 15px; margin-top: 15px;">
@@ -82,6 +159,47 @@
                 <label style="display: block; font-weight: 600; margin-bottom: 5px;">Lead Documents</label>
                 <div class="modal-passenger-docs-container"></div>
                 <button type="button" class="btn-add-doc-row" style="background: #3182ce; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; margin-top: 8px;">+ Add Document Row</button>
+            </div>
+
+            <!-- 🏷️ NAYA SECTION — Tag / Handover -->
+            <div id="tagSection" style="display: none; border-top: 1px solid #e2e8f0; padding-top: 15px; margin-top: 15px;">
+                <label style="display: block; font-weight: 600; margin-bottom: 5px;">Is lead ko kis department/employee ko tag karna hai?</label>
+                <div id="tagMsg" class="msg msg-error"></div>
+                <div class="form-row" style="margin-bottom: 8px;">
+                    <div>
+                        <label style="font-size: 12px;">Department</label>
+                        <select id="tagDepartmentSelect">
+                            <option value="">-- Select Department --</option>
+                            <option value="Admin">Admin</option>
+                            <option value="Ticketing/Flights">Ticketing/Flights</option>
+                            <option value="Finance">Finance</option>
+                            <option value="Cordination">Cordination</option>
+                            <option value="Domestic Group">Domestic Group</option>
+                            <option value="Domestic FIT">Domestic FIT</option>
+                            <option value="International Group">International Group</option>
+                            <option value="International FIT">International FIT</option>
+                            <option value="Visa">Visa</option>
+                            <option value="Marketing">Marketing</option>
+                            <option value="Customer Support">Customer Support</option>
+                            <option value="Religious Tours">Religious Tours</option>
+                            <option value="Corporate">Corporate</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size: 12px;">Employee</label>
+                        <select id="tagEmployeeSelect">
+                            <option value="">-- Select Employee --</option>
+                        </select>
+                    </div>
+                </div>
+                <label style="font-size: 12px;">Note (optional)</label>
+                <textarea id="tagNoteText" placeholder="e.g. Visa docs complete, please proceed with ticketing" style="width: 100%; height: 60px; padding: 8px; border: 1px solid #cbd5e0; border-radius: 6px; font-family: inherit; margin-bottom: 8px;"></textarea>
+                <button type="button" id="btnSendTag" class="btn-primary" style="padding: 6px 14px; font-size: 12px; background: #805ad5; margin-bottom: 15px; cursor: pointer;">🏷️ Tag Karein</button>
+
+                <div style="border-top: 1px dashed #cbd5e0; padding-top: 12px;">
+                    <strong style="font-size: 13px; color: #2d3748;">📜 Tag History (Handover Chain)</strong>
+                    <div id="tagHistoryList" style="margin-top: 8px; max-height: 200px; overflow-y: auto;"></div>
+                </div>
             </div>
 
             <div style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #e2e8f0; padding-top: 15px;">
@@ -135,67 +253,98 @@
         </div>
     </div>
 
-    <div class="card header">
-        <div style="display: flex; align-items: center; gap: 12px;">
-            <img src="/logo.png" alt="Deluxe Holidays Logo" style="width: 90px;">
-            <h2>Deluxe CRM Dashboard</h2>
+    <!-- ================= APP LAYOUT: SIDEBAR + MAIN ================= -->
+    <div class="app-layout">
+
+        <!-- 🧭 LEFT SIDEBAR (Facebook-style) -->
+        <div class="sidebar">
+            <div class="sidebar-top">
+                <img src="/logo.png" alt="Logo">
+                <span class="brand-name">Deluxe CRM</span>
+            </div>
+
+            <div class="sidebar-search">
+                <span>🔍</span>
+                <input type="text" id="sidebarSearchInput" placeholder="Search leads...">
+            </div>
+
+            <button type="button" class="sidebar-nav-item" data-section="leadsManagementCard">
+                <span class="icon">📋</span> Leads
+            </button>
+            <button type="button" class="sidebar-nav-item" data-section="addLeadCard">
+                <span class="icon">➕</span> Add New Lead
+            </button>
+            <button type="button" class="sidebar-nav-item" data-section="dashboardAnalyticsSection">
+                <span class="icon">📊</span> Analytics
+            </button>
+            <button type="button" class="sidebar-nav-item admin-only" data-section="employeeManagementCard">
+                <span class="icon">👥</span> Employees
+            </button>
+
+            <div class="sidebar-divider"></div>
+
+            <div class="sidebar-user">
+                <span class="sidebar-user-name" id="userNameDisplay"></span>
+                <button class="btn-logout" id="logoutBtn" style="padding: 4px 10px; font-size: 12px;">Logout</button>
+            </div>
         </div>
-        <div>
-            <span id="userNameDisplay" style="margin-right: 15px; font-weight: bold;"></span>
-            <button class="btn-logout" id="logoutBtn">Logout</button>
-        </div>
-    </div>
 
-    <!-- 🔘 Toggle Buttons Bar -->
-    <div class="card toggle-bar">
-        <button type="button" class="toggle-btn admin-only" id="toggleEmployeesBtn">👥 Manage Employees</button>
-        <button type="button" class="toggle-btn" id="toggleAddLeadBtn">➕ Add New Lead</button>
-        <button type="button" class="toggle-btn" id="toggleAnalyticsBtn">📊 Analytics</button>
-        <button type="button" class="toggle-btn" id="toggleLeadsBtn">📋 Leads Management</button>
-    </div>
+        <!-- 📄 MAIN CONTENT -->
+        <div class="main-content">
 
-    <!-- 👤 Employee Management — Initially Hidden -->
-    <div class="card" id="employeeManagementCard" style="display: none;">
-        <h3>Manage Employees</h3>
-        <div id="empMsg" class="msg msg-error"></div>
-        <div id="empSuccessMsg" class="msg msg-success"></div>
-
-        <table class="emp-table" id="employeesTable" style="margin-bottom: 20px;">
-            <thead>
-                <tr>
-                    <th>Employee ID</th>
-                    <th>Name</th>
-                    <th>Contact Number</th>
-                    <th>Email</th>
-                    <th>Department</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="employeesTableBody"></tbody>
-        </table>
-
-        <h4 style="margin-bottom: 10px;">Add New Employee</h4>
-        <p style="font-size: 12px; color: #718096; margin-bottom: 10px;">
-            
-        </p>
-        <form id="addEmployeeForm">
-            <div class="form-row">
-                <div>
-                    <label>Full Name</label>
-                    <input type="text" id="empName" required placeholder="e.g. Bilal Raza">
+            <div class="card header">
+                <h2 style="margin: 0;">Dashboard</h2>
+                <div class="notif-bell-wrap">
+                    <button type="button" id="notifBellBtn" title="Notifications">
+                        🔔
+                        <span id="notifBadge"></span>
+                    </button>
+                    <div id="notificationsPanel"></div>
                 </div>
-                <div>
-                    <label>Contact Number</label>
-                    <input type="text" id="empPhone" placeholder="03001234567">
+            </div>
+
+            <!-- 👤 Employee Management -->
+            <div class="card" id="employeeManagementCard" style="display: none;">
+                <div class="section-header">
+                    <h3 style="margin:0;">Manage Employees</h3>
+                    <button type="button" id="exportEmployeesCsvBtn" class="btn-export">⬇ Export Employees CSV</button>
                 </div>
-                <div>
-                    <label>Email (optional)</label>
-                    <input type="email" id="empEmail">
-                </div>
-                <div>
-                    <label>Department</label>
-                    <select id="empDepartment" required>
+                <div id="empMsg" class="msg msg-error"></div>
+                <div id="empSuccessMsg" class="msg msg-success"></div>
+
+                <table class="emp-table" id="employeesTable" style="margin-bottom: 20px;">
+                    <thead>
+                        <tr>
+                            <th>Employee ID</th>
+                            <th>Name</th>
+                            <th>Contact Number</th>
+                            <th>Email</th>
+                            <th>Department</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="employeesTableBody"></tbody>
+                </table>
+
+                <h4 style="margin-bottom: 10px;">Add New Employee</h4>
+                <form id="addEmployeeForm">
+                    <div class="form-row">
+                        <div>
+                            <label>Full Name</label>
+                            <input type="text" id="empName" required placeholder="e.g. Bilal Raza">
+                        </div>
+                        <div>
+                            <label>Contact Number</label>
+                            <input type="text" id="empPhone" placeholder="03001234567">
+                        </div>
+                        <div>
+                            <label>Email (optional)</label>
+                            <input type="email" id="empEmail">
+                        </div>
+                        <div>
+                            <label>Department</label>
+                            <select id="empDepartment" required>
     <option value="">-- Select Department --</option>
     <option value="Admin">Admin</option>
     <option value="Ticketing/Flights">Ticketing/Flights</option>
@@ -211,73 +360,80 @@
     <option value="Religious Tours">Religious Tours</option>
     <option value="Corporate">Corporate</option>
 </select>
-                </div>
-            </div>
-            <button type="submit" class="btn-primary">Add Employee</button>
-        </form>
-    </div>
-
-    <!-- ➕ Add New Lead — Initially Hidden -->
-    <div class="card" id="addLeadCard" style="display: none;">
-        <h3>Add New Lead</h3>
-        <div id="addLeadMsg" class="msg msg-error"></div>
-        <form id="addLeadForm">
-            <div class="form-row">
-                <div>
-                    <label>Full Name</label>
-                    <input type="text" id="newLeadName" required placeholder="e.g. Ahmed Raza">
-                </div>
-                <div>
-                    <label>Email</label>
-                    <input type="email" id="newLeadEmail" required placeholder="ahmed@gmail.com">
-                </div>
-                <div>
-                    <label>Phone</label>
-                    <input type="text" id="newLeadPhone" placeholder="03001234567">
-                </div>
-                <div>
-                    <label>Destination</label>
-                    <input type="text" id="newLeadDestination" placeholder="Dubai / Canada">
-                </div>
-                <div>
-                    <label>Lead Source</label>
-                    <input type="text" id="newLeadSource" placeholder="e.g. Facebook / Direct">
-                </div>
-                <div>
-                    <label>Number of Persons</label>
-                    <input type="number" id="numberOfPersons" min="1" value="1">
-                </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-primary">Add Employee</button>
+                </form>
             </div>
 
-            <button type="submit" class="btn-primary" style="margin-top: 10px;">Add Lead</button>
-        </form>
-    </div>
+            <!-- ➕ Add New Lead -->
+            <div class="card" id="addLeadCard" style="display: none;">
+                <h3>Add New Lead</h3>
+                <div id="addLeadMsg" class="msg msg-error"></div>
+                <form id="addLeadForm">
+                    <div class="form-row">
+                        <div>
+                            <label>Full Name</label>
+                            <input type="text" id="newLeadName" required placeholder="e.g. Ahmed Raza">
+                        </div>
+                        <div>
+                            <label>Email</label>
+                            <input type="email" id="newLeadEmail" required placeholder="ahmed@gmail.com">
+                        </div>
+                        <div>
+                            <label>Phone</label>
+                            <input type="text" id="newLeadPhone" placeholder="03001234567">
+                        </div>
+                        <div>
+                            <label>Destination</label>
+                            <input type="text" id="newLeadDestination" placeholder="Dubai / Canada">
+                        </div>
+                        <div>
+                            <label>Lead Source</label>
+                            <input type="text" id="newLeadSource" placeholder="e.g. Facebook / Direct">
+                        </div>
+                        <div>
+                            <label>Number of Persons</label>
+                            <input type="number" id="numberOfPersons" min="1" value="1">
+                        </div>
+                    </div>
 
-    <!-- 📋 Leads Management — Initially Hidden -->
-    <div class="card" id="leadsManagementCard" style="display: none;">
-        <h3>Leads Management</h3>
-        <div style="margin-bottom: 15px;">
-            <label>Search by Name</label>
-            <input type="text" id="searchName" placeholder="e.g. Ahmed" style="max-width: 300px;">
+                    <button type="submit" class="btn-primary" style="margin-top: 10px;">Add Lead</button>
+                </form>
+            </div>
+
+            <!-- 📋 Leads Management -->
+            <div class="card" id="leadsManagementCard" style="display: none;">
+                <div class="section-header">
+                    <h3 style="margin:0;">Leads Management</h3>
+                    <button type="button" id="exportLeadsCsvBtn" class="btn-export">⬇ Export Leads CSV</button>
+                </div>
+                <div style="margin: 15px 0;">
+                    <label>Search by Name</label>
+                    <input type="text" id="searchName" placeholder="e.g. Ahmed" style="max-width: 300px;">
+                </div>
+                <table id="leadsTable">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Destination</th>
+                            <th>Source</th>
+                            <th>Passengers Info</th>
+                            <th>Visa Assigned</th>
+                            <th>Ticketing Assigned</th>
+                            <th>Finance Assigned</th>
+                            <th>Tour Assigned</th>
+                            <th>Tagged To</th>
+                            <th class="admin-only">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leadsTableBody"></tbody>
+                </table>
+            </div>
+
         </div>
-        <table id="leadsTable">
-            <thead>
-                <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Phone</th>
-                    <th>Destination</th>
-                    <th>Source</th>
-                    <th>Passengers Info</th>
-                    <th>Visa Assigned</th>
-                    <th>Ticketing Assigned</th>
-                    <th>Finance Assigned</th>
-                    <th>Tour Assigned</th>
-                    <th class="admin-only">Actions</th>
-                </tr>
-            </thead>
-            <tbody id="leadsTableBody"></tbody>
-        </table>
     </div>
 
     <script src="/dashboard.js"></script>
