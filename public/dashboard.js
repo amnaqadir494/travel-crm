@@ -122,6 +122,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
+    const resetPassInModalBtn = document.getElementById('btnResetPasswordInModal');
+    if (resetPassInModalBtn) {
+        resetPassInModalBtn.addEventListener('click', () => {
+            if (currentEditingEmployeeId) resetEmployeePassword(currentEditingEmployeeId, token);
+        });
+    }
+
     document.getElementById('closeModalBtn').addEventListener('click', () => {
         document.getElementById('leadDetailsModal').style.display = 'none';
     });
@@ -446,7 +453,6 @@ function renderEmployeesTable() {
             <td>${statusBadge}</td>
             <td>
                 <button type="button" class="btn-edit btn-edit-employee" data-id="${escapeHTML(emp.id)}">Edit</button>
-                <button type="button" class="btn-reset btn-reset-password" data-id="${escapeHTML(emp.id)}">Reset Password</button>
                 <button type="button" class="btn-danger btn-delete-employee" data-id="${escapeHTML(emp.id)}">Delete</button>
             </td>
         `;
@@ -714,7 +720,7 @@ function renderLeads(leads, searchQuery = '') {
             <td>${buildAssignCell(lead, 'assignedTour')}</td>
             <td>${tagCell}</td>
             <td style="white-space: nowrap;">
-                <button type="button" class="btn-view-lead" data-id="${escapeHTML(lead.id)}" title="View / Edit Details" style="background:#3182ce; color:white; border:none; width:34px; height:34px; border-radius:6px; cursor:pointer; font-size:16px;">👁️</button>
+                <button type="button" class="btn-view-lead btn-edit" data-id="${escapeHTML(lead.id)}" title="View / Edit Details">Edit</button>
                 ${isAdmin ? `<button class="btn-danger" data-id="${escapeHTML(lead.id)}" style="margin-left:6px;">Delete</button>` : ''}
             </td>
         `;
@@ -746,7 +752,7 @@ function renderTagHistory(tagHistory) {
     container.innerHTML = '';
 
     if (!Array.isArray(tagHistory) || tagHistory.length === 0) {
-        container.innerHTML = '<p style="font-size: 12px; color: #718096;">Koi tagging history nahi hai abhi.</p>';
+        container.innerHTML = '<p style="font-size: 12px; color: #718096;">No tagging history yet.</p>';
         return;
     }
 
@@ -773,7 +779,7 @@ async function sendLeadTag(token) {
     msgBox.style.display = 'none';
 
     if (!department || !toEmail) {
-        msgBox.innerText = 'Department aur Employee dono select karna zaroori hai.';
+        msgBox.innerText = 'Please select both Department and Employee.';
         msgBox.style.display = 'block';
         return;
     }
@@ -786,7 +792,7 @@ async function sendLeadTag(token) {
         });
         const data = await res.json();
         if (!res.ok) {
-            msgBox.innerText = data.error || 'Tag karne mein masla aaya.';
+            msgBox.innerText = data.error || 'Something went wrong while tagging.';
             msgBox.style.display = 'block';
             return;
         }

@@ -120,10 +120,10 @@
     <!-- 🔔 Notification Popup — jab koi employee ko tag kare, dashboard khulte hi yeh dikhta hai -->
     <div id="notificationPopupModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1100; justify-content: center; align-items: center;">
         <div style="background: white; padding: 22px; border-radius: 8px; width: 420px; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-            <h3 style="margin-top: 0; margin-bottom: 12px; color: #2d3748;">🔔 Naye Tags / Assignments</h3>
+            <h3 style="margin-top: 0; margin-bottom: 12px; color: #2d3748;">🔔 New Tags / Assignments</h3>
             <div id="notificationPopupList"></div>
             <div style="margin-top: 15px; display: flex; justify-content: flex-end;">
-                <button type="button" id="closeNotifPopupBtn" style="padding: 8px 15px; background: #3182ce; color: white; border: none; border-radius: 4px; cursor: pointer;">Sab Read Mark Karke Band Karein</button>
+                <button type="button" id="closeNotifPopupBtn" style="padding: 8px 15px; background: #3182ce; color: white; border: none; border-radius: 4px; cursor: pointer;">Mark All as Read & Close</button>
             </div>
         </div>
     </div>
@@ -205,7 +205,7 @@
 
             <!-- 🏷️ NAYA SECTION — Tag / Handover -->
             <div id="tagSection" style="display: none; border-top: 1px solid #e2e8f0; padding-top: 15px; margin-top: 15px;">
-                <label style="display: block; font-weight: 600; margin-bottom: 5px;">Is lead ko kis department/employee ko tag karna hai?</label>
+                <label style="display: block; font-weight: 600; margin-bottom: 5px;">Which department/employee should this lead be tagged to?</label>
                 <div id="tagMsg" class="msg msg-error"></div>
                 <div class="form-row" style="margin-bottom: 8px;">
                     <div>
@@ -236,7 +236,7 @@
                 </div>
                 <label style="font-size: 12px;">Note (optional)</label>
                 <textarea id="tagNoteText" placeholder="e.g. Visa docs complete, please proceed with ticketing" style="width: 100%; height: 60px; padding: 8px; border: 1px solid #cbd5e0; border-radius: 6px; font-family: inherit; margin-bottom: 8px;"></textarea>
-                <button type="button" id="btnSendTag" class="btn-primary" style="padding: 6px 14px; font-size: 12px; background: #805ad5; margin-bottom: 15px; cursor: pointer;">🏷️ Tag Karein</button>
+                <button type="button" id="btnSendTag" class="btn-primary" style="padding: 6px 14px; font-size: 12px; background: #805ad5; margin-bottom: 15px; cursor: pointer;">🏷️Send Tag</button>
 
                 <div style="border-top: 1px dashed #cbd5e0; padding-top: 12px;">
                     <strong style="font-size: 13px; color: #2d3748;">📜 Tag History (Handover Chain)</strong>
@@ -288,9 +288,12 @@
 </select>
             </div>
 
-            <div style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
-                <button type="button" id="closeEditEmpModalBtn" style="padding: 8px 15px; background: #cbd5e0; border: none; border-radius: 4px; cursor: pointer;">Cancel</button>
-                <button type="button" id="saveEditEmpBtn" style="padding: 8px 15px; background: #3182ce; color: white; border: none; border-radius: 4px; cursor: pointer;">Save Changes</button>
+            <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <button type="button" id="btnResetPasswordInModal" class="btn-reset" style="padding: 8px 15px;">🔑 Reset Password</button>
+                <div style="display: flex; gap: 10px;">
+                    <button type="button" id="closeEditEmpModalBtn" style="padding: 8px 15px; background: #cbd5e0; border: none; border-radius: 4px; cursor: pointer;">Cancel</button>
+                    <button type="button" id="saveEditEmpBtn" style="padding: 8px 15px; background: #3182ce; color: white; border: none; border-radius: 4px; cursor: pointer;">Save Changes</button>
+                </div>
             </div>
         </div>
     </div>

@@ -95,15 +95,24 @@ const LeadPSQL = sequelize.define('Lead', {
     assignedTicketing: { type: DataTypes.STRING },
     assignedFinance: { type: DataTypes.STRING },
     assignedTour: { type: DataTypes.STRING },
-    // 🏷️ NAYE FIELDS — Tagging / Handover chain ke liye
+    // 🏷️ Tagging / Handover chain ke liye
     tagHistory: { type: DataTypes.JSON, defaultValue: [] },
     currentTagDepartment: { type: DataTypes.STRING },
     currentTagEmail: { type: DataTypes.STRING },
-    currentTagName: { type: DataTypes.STRING }
+    currentTagName: { type: DataTypes.STRING },
+    // 📌 NAYE FIELDS — Detail modal ke liye
+    createdAt: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+    addedByName: { type: DataTypes.STRING },
+    addedByEmail: { type: DataTypes.STRING },
+    travelDate: { type: DataTypes.STRING },
+    duration: { type: DataTypes.STRING },
+    leadStatus: { type: DataTypes.STRING, defaultValue: 'New Lead' }
 }, {
     tableName: 'Leads',
     timestamps: false
 });
+
+const LEAD_STATUSES = ['New Lead', 'Contacted', 'Quoted', 'Confirmed', 'Complete', 'Cancelled/Refund'];
 
 // 🔔 NAYA MODEL — Notifications (jab kisi employee ko tag kiya jaye)
 const NotificationPSQL = sequelize.define('Notification', {
@@ -131,6 +140,13 @@ sequelize.authenticate()
             await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "currentTagDepartment" VARCHAR(255);');
             await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "currentTagEmail" VARCHAR(255);');
             await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "currentTagName" VARCHAR(255);');
+            await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP DEFAULT NOW();');
+            await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "addedByName" VARCHAR(255);');
+            await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "addedByEmail" VARCHAR(255);');
+            await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "travelDate" VARCHAR(255);');
+            await sequelize.query('ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "duration" VARCHAR(255);');
+            await sequelize.query(`ALTER TABLE "Leads" ADD COLUMN IF NOT EXISTS "leadStatus" VARCHAR(255) DEFAULT 'New Lead';`);
+            await sequelize.query(`UPDATE "Leads" SET "leadStatus" = 'New Lead' WHERE "leadStatus" IS NULL;`);
             await sequelize.query('ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "phone" VARCHAR(255);');
             await sequelize.query('ALTER TABLE "users" ALTER COLUMN "email" DROP NOT NULL;');
             console.log("✅ All columns/constraints verified/added successfully via code");
@@ -393,7 +409,7 @@ app.post('/api/admin/users/:id/reset-password', authenticateToken, requireAdmin,
 
         await foundUser.update({ password: null });
         res.json({
-            message: `Password reset ho gaya! ${foundUser.name} (${buildEmployeeId(foundUser.id)}) ab "Activate Account" se dobara apna naya password set kar sakte hain — unhe unki Employee ID aur naam bata dein.`
+            message: 'Password reset successfully! ${foundUser.name} (${buildEmployeeId(foundUser.id)}) can now set a new password via "Activate Account" — please share their Employee ID and name with them.'
         });
     } catch (err) {
         console.error("❌ Reset Password Error:", err);
@@ -435,7 +451,7 @@ app.post('/api/leads', authenticateToken, upload.any(), [
             return res.status(400).json({ error: errors.array().map(e => e.msg).join(', ') });
         }
 
-        const { name, email, phone, destination, source } = req.body;
+        const { name, email, phone, destination, source, travelDate, duration } = req.body;
         const numberOfPersons = parseInt(req.body.numberOfPersons) || 1;
 
         let passengersMeta = [];
@@ -448,10 +464,16 @@ app.post('/api/leads', authenticateToken, upload.any(), [
             phone: phone || '',
             destination: destination || '',
             source: source || 'Direct',
+            travelDate: travelDate || '',
+            duration: duration || '',
             numberOfPersons,
             passengers: passengersMeta,
             followUpNotes: [],
             documents: [],
+            createdAt: new Date(),
+            addedByName: req.user.name,
+            addedByEmail: req.user.email,
+            leadStatus: 'New Lead',
             tagHistory: [{
                 fromName: req.user.name,
                 fromEmail: req.user.email,
@@ -579,6 +601,64 @@ app.patch('/api/leads/:id/source', authenticateToken, [
 });
 
 // ==========================================
+// 📌 BASIC INFO UPDATE — Name/Email/Phone/Destination/Travel Date/Duration
+// ==========================================
+app.patch('/api/leads/:id/basic-info', authenticateToken, [
+    body('name').optional().trim().notEmpty().withMessage('Name cannot be empty'),
+    body('email').optional().isEmail().withMessage('Invalid email format')
+], async (req, res) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ error: errors.array().map(e => e.msg).join(', ') });
+        }
+
+        const lead = await LeadPSQL.findByPk(req.params.id);
+        if (!lead) return res.status(404).json({ error: "Lead not found!" });
+
+        const { name, email, phone, destination, source, travelDate, duration, numberOfPersons } = req.body;
+        const updateData = {};
+        if (name !== undefined) updateData.name = name;
+        if (email !== undefined) updateData.email = email;
+        if (phone !== undefined) updateData.phone = phone;
+        if (destination !== undefined) updateData.destination = destination;
+        if (source !== undefined) updateData.source = source;
+        if (travelDate !== undefined) updateData.travelDate = travelDate;
+        if (duration !== undefined) updateData.duration = duration;
+        if (numberOfPersons !== undefined) updateData.numberOfPersons = parseInt(numberOfPersons) || lead.numberOfPersons;
+
+        await lead.update(updateData);
+        res.json(lead);
+    } catch (err) {
+        console.error("❌ Basic Info Update Error:", err);
+        res.status(500).json({ error: "Failed to update lead info" });
+    }
+});
+
+// ==========================================
+// 📌 STATUS UPDATE — New Lead / Contacted / Quoted / Confirmed / Complete / Cancelled/Refund
+// ==========================================
+app.patch('/api/leads/:id/status', authenticateToken, [
+    body('status').isIn(LEAD_STATUSES).withMessage('Invalid status value')
+], async (req, res) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ error: errors.array().map(e => e.msg).join(', ') });
+        }
+
+        const lead = await LeadPSQL.findByPk(req.params.id);
+        if (!lead) return res.status(404).json({ error: "Lead not found!" });
+
+        await lead.update({ leadStatus: req.body.status });
+        res.json(lead);
+    } catch (err) {
+        console.error("❌ Status Update Error:", err);
+        res.status(500).json({ error: "Failed to update status" });
+    }
+});
+
+// ==========================================
 // 🏷️ TAG / HANDOVER — Lead ko kisi employee/department ko tag karna
 // Chain: Sales ne Finance ko tag kia -> Finance ne Visa ko tag kia -> waghera
 // ==========================================
@@ -624,7 +704,7 @@ app.post('/api/leads/:id/tag', authenticateToken, [
             recipientEmail: toUser.email,
             leadId: lead.id,
             leadName: lead.name,
-            message: `${req.user.name} ne aap ko lead "${lead.name}" (${department}) ke liye tag kiya hai.`,
+            message: `${req.user.name} has tagged you on lead "${lead.name}" (${department}).`,
             department,
             taggedByName: req.user.name
         });
