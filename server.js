@@ -689,7 +689,10 @@ app.post('/api/leads/:id/tag', authenticateToken, [
             timestamp: new Date().toISOString()
         };
 
-        const existingHistory = Array.isArray(lead.tagHistory) ? lead.tagHistory : [];
+        // ⚠️ FIX: naya array banao (spread se copy), purane reference ko mutate mat karo —
+        // warna Sequelize ko pata nahi chalta ke JSON field change hui hai, aur purani history
+        // save hone ke bajaye sirf latest tag hi DB mein reh jata tha.
+        const existingHistory = Array.isArray(lead.tagHistory) ? [...lead.tagHistory] : [];
         existingHistory.push(historyEntry);
 
         await lead.update({
