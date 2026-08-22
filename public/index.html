@@ -128,13 +128,55 @@
         </div>
     </div>
 
-    <!-- Edit Passengers / Manage Lead Modal with 4 Action Buttons -->
-    <div id="editPassengersModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
-        <div style="background: white; padding: 25px; border-radius: 8px; width: 650px; max-height: 85vh; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-            <h3 style="margin-top: 0; margin-bottom: 15px; color: #2d3748;">Manage Lead Details</h3>
+    <!-- 👁️ Lead Details Modal — poori info + 4 action tabs -->
+    <div id="leadDetailsModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+        <div style="background: white; padding: 25px; border-radius: 8px; width: 700px; max-height: 88vh; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h3 style="margin-top: 0; margin-bottom: 15px; color: #2d3748;">Lead Details</h3>
 
-            <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
-                <button type="button" id="btnOpenTraveller" class="btn-primary" style="flex: 1; min-width: 120px; padding: 10px; cursor: pointer; font-weight: bold;">Add Traveller</button>
+            <!-- 📌 Meta info: Date Added / Added by -->
+            <div style="display: flex; gap: 20px; font-size: 12px; color: #718096; margin-bottom: 14px; background:#f7fafc; padding:8px 12px; border-radius:6px;">
+                <div><strong>Date Added:</strong> <span id="detailDateAdded">—</span></div>
+                <div><strong>Added by:</strong> <span id="detailAddedBy">—</span></div>
+            </div>
+
+            <div id="basicInfoMsg" class="msg msg-error"></div>
+
+            <!-- 📌 Editable basic info -->
+            <div class="form-row">
+                <div><label>Name</label><input type="text" id="detailName"></div>
+                <div><label>Contact</label><input type="text" id="detailPhone"></div>
+                <div><label>Email</label><input type="email" id="detailEmail"></div>
+                <div><label>Source</label><input type="text" id="detailSource"></div>
+            </div>
+            <div class="form-row">
+                <div><label>Travelling to</label><input type="text" id="detailDestination"></div>
+                <div><label>No. of Travellers</label><input type="number" id="detailNumPersons" min="1"></div>
+                <div><label>Travel Date</label><input type="text" id="detailTravelDate" placeholder="e.g. 15 Sep 2026"></div>
+                <div><label>Duration</label><input type="text" id="detailDuration" placeholder="e.g. 7 Days / 6 Nights"></div>
+            </div>
+            <button type="button" id="btnSaveBasicInfo" class="btn-primary" style="margin-bottom: 15px;">💾 Save Info</button>
+
+            <!-- 📌 Status -->
+            <div style="margin-bottom: 15px;">
+                <label>Status</label>
+                <select id="leadStatusSelect" style="max-width: 260px;">
+                    <option value="New Lead">New Lead</option>
+                    <option value="Contacted">Contacted</option>
+                    <option value="Quoted">Quoted</option>
+                    <option value="Confirmed">Confirmed</option>
+                    <option value="Complete">Complete</option>
+                    <option value="Cancelled/Refund">Cancelled/Refund</option>
+                </select>
+            </div>
+
+            <!-- 📌 4 Assignments -->
+            <div style="margin-bottom: 15px;">
+                <label style="margin-bottom: 8px;">Assignings</label>
+                <div id="detailAssignmentsGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;"></div>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; border-top: 1px solid #e2e8f0; padding-top: 15px;">
+                <button type="button" id="btnOpenTraveller" class="btn-primary" style="flex: 1; min-width: 120px; padding: 10px; cursor: pointer; font-weight: bold;">Travellers</button>
                 <button type="button" id="btnOpenFollowUp" class="btn-primary" style="flex: 1; min-width: 120px; padding: 10px; cursor: pointer; font-weight: bold; background: #d69e2e;">Add Follow Up</button>
                 <button type="button" id="btnOpenDocument" class="btn-primary" style="flex: 1; min-width: 120px; padding: 10px; cursor: pointer; font-weight: bold; background: #38a169;">Add Document</button>
                 <button type="button" id="btnOpenTag" class="btn-primary" style="flex: 1; min-width: 120px; padding: 10px; cursor: pointer; font-weight: bold; background: #805ad5;">🏷️ Tag / Handover</button>
@@ -396,6 +438,14 @@
                             <label>Number of Persons</label>
                             <input type="number" id="numberOfPersons" min="1" value="1">
                         </div>
+                        <div>
+                            <label>Travel Date</label>
+                            <input type="text" id="newLeadTravelDate" placeholder="e.g. 15 Sep 2026">
+                        </div>
+                        <div>
+                            <label>Duration</label>
+                            <input type="text" id="newLeadDuration" placeholder="e.g. 7 Days / 6 Nights">
+                        </div>
                     </div>
 
                     <button type="submit" class="btn-primary" style="margin-top: 10px;">Add Lead</button>
@@ -416,17 +466,11 @@
                     <thead>
                         <tr>
                             <th>Name</th>
-                            <th>Email</th>
                             <th>Phone</th>
                             <th>Destination</th>
-                            <th>Source</th>
-                            <th>Passengers Info</th>
-                            <th>Visa Assigned</th>
-                            <th>Ticketing Assigned</th>
-                            <th>Finance Assigned</th>
-                            <th>Tour Assigned</th>
+                            <th>Tour Status</th>
                             <th>Tagged To</th>
-                            <th class="admin-only">Actions</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="leadsTableBody"></tbody>

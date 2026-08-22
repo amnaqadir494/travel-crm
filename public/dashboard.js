@@ -12,6 +12,9 @@ const ALL_DEPARTMENTS = [
     'Marketing', 'Customer Support', 'Religious Tours', 'Corporate'
 ];
 
+// 📌 Lead ke status options
+const LEAD_STATUSES = ['New Lead', 'Contacted', 'Quoted', 'Confirmed', 'Complete', 'Cancelled/Refund'];
+
 function escapeHTML(str) {
     if (!str) return '';
     return str.toString()
@@ -120,7 +123,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     document.getElementById('closeModalBtn').addEventListener('click', () => {
-        document.getElementById('editPassengersModal').style.display = 'none';
+        document.getElementById('leadDetailsModal').style.display = 'none';
     });
 
     document.getElementById('modalNumPersons').addEventListener('input', (e) => {
@@ -235,10 +238,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             return;
         }
 
-        const editBtn = e.target.closest('.btn-edit-passengers');
-        if (editBtn) {
-            const leadId = editBtn.getAttribute('data-id');
-            if (leadId) openEditPassengersModal(leadId);
+        const viewBtn = e.target.closest('.btn-view-lead');
+        if (viewBtn) {
+            const leadId = viewBtn.getAttribute('data-id');
+            if (leadId) openLeadDetailsModal(leadId);
         }
     });
 
@@ -251,6 +254,25 @@ document.addEventListener("DOMContentLoaded", async () => {
             return;
         }
     });
+
+    // 📌 Detail modal ke andar ke assignment dropdowns aur status dropdown
+    document.getElementById('leadDetailsModal').addEventListener('change', (e) => {
+        const assignSelect = e.target.closest('.assign-select');
+        if (assignSelect) {
+            const leadId = assignSelect.getAttribute('data-id');
+            const field = assignSelect.getAttribute('data-field');
+            updateAssignment(leadId, field, assignSelect.value, token);
+            return;
+        }
+        if (e.target && e.target.id === 'leadStatusSelect') {
+            updateLeadStatus(token);
+        }
+    });
+
+    const saveBasicInfoBtn = document.getElementById('btnSaveBasicInfo');
+    if (saveBasicInfoBtn) {
+        saveBasicInfoBtn.addEventListener('click', () => saveBasicInfo(token));
+    }
 });
 
 function showModalSection(sectionId) {
@@ -669,8 +691,7 @@ function renderLeads(leads, searchQuery = '') {
     tbody.innerHTML = '';
 
     if (leads.length === 0) {
-        const colCount = currentUser.department === 'Admin' ? 12 : 11;
-        tbody.innerHTML = `<tr><td colspan="${colCount}" style="text-align: center; padding: 20px; color: #718096; font-weight: 600;">No results found</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 20px; color: #718096; font-weight: 600;">No results found</td></tr>`;
         return;
     }
 
@@ -681,29 +702,6 @@ function renderLeads(leads, searchQuery = '') {
         const nameMatched = searchQuery && (lead.name || '').toLowerCase().includes(searchQuery);
         const nameCellStyle = nameMatched ? 'background-color: #c6f6d5; font-weight: 600; color: #22543d;' : '';
 
-        let passengersHtml = '';
-        if (lead.passengers && lead.passengers.length > 0) {
-            passengersHtml = lead.passengers.map((p, idx) => {
-                return `<div style="font-size: 12px; border-bottom: 1px dashed #ccc; padding-bottom: 4px; margin-bottom: 4px;"><strong>P${idx + 1}:</strong> ${escapeHTML(p.name || 'N/A')} | Pass: ${escapeHTML(p.passport || 'N/A')} ${p.ageCategory ? `| ${escapeHTML(p.ageCategory)}` : ''}</div>`;
-            }).join('');
-        } else {
-            passengersHtml = '<div style="margin-bottom: 5px;">N/A</div>';
-        }
-
-        if (lead.documents && lead.documents.length > 0) {
-            passengersHtml += '<div style="font-size: 12px; margin-top: 6px;"><strong>📄 Documents:</strong><br>' +
-                lead.documents.map(d => `- ${escapeHTML(d.name || 'Doc')} ${d.url ? `(<a href="${escapeHTML(d.url)}" target="_blank" style="color: #3182ce; font-weight: bold;">View</a>)` : ''}`).join('<br>') +
-                '</div>';
-        }
-
-        if (lead.followUpNotes && lead.followUpNotes.length > 0) {
-            lead.followUpNotes.forEach(note => {
-                passengersHtml += `<div style="background: #fffaf0; border-left: 3px solid #d69e2e; padding: 4px 6px; font-size: 11px; margin-top: 4px; border-radius: 4px;"><strong>Follow-up (${escapeHTML(note.time)}):</strong> ${escapeHTML(note.text)}</div>`;
-            });
-        }
-
-        passengersHtml += `<button type="button" class="btn-primary btn-edit-passengers" data-id="${escapeHTML(lead.id)}" style="padding: 4px 10px; font-size: 11px; margin-top: 5px; cursor: pointer;">Edit / Upload Docs / Tag</button>`;
-
         // 🏷️ Current tag / handover cell
         const tagCell = lead.currentTagName
             ? `<div style="font-size: 12px;"><strong>${escapeHTML(lead.currentTagName)}</strong><br><span style="color:#718096;">${escapeHTML(lead.currentTagDepartment || '')}</span></div>`
@@ -711,18 +709,13 @@ function renderLeads(leads, searchQuery = '') {
 
         tr.innerHTML = `
             <td style="${nameCellStyle}">${escapeHTML(lead.name)}</td>
-            <td>${escapeHTML(lead.email)}</td>
             <td>${escapeHTML(lead.phone)}</td>
             <td>${escapeHTML(lead.destination)}</td>
-            <td>${buildSourceCell(lead)}</td>
-            <td>${passengersHtml}</td>
-            <td>${buildAssignCell(lead, 'assignedVisa')}</td>
-            <td>${buildAssignCell(lead, 'assignedTicketing')}</td>
-            <td>${buildAssignCell(lead, 'assignedFinance')}</td>
             <td>${buildAssignCell(lead, 'assignedTour')}</td>
             <td>${tagCell}</td>
-            <td style="display: ${isAdmin ? 'table-cell' : 'none'};">
-                ${isAdmin ? `<button class="btn-danger" data-id="${escapeHTML(lead.id)}">Delete</button>` : ''}
+            <td style="white-space: nowrap;">
+                <button type="button" class="btn-view-lead" data-id="${escapeHTML(lead.id)}" title="View / Edit Details" style="background:#3182ce; color:white; border:none; width:34px; height:34px; border-radius:6px; cursor:pointer; font-size:16px;">👁️</button>
+                ${isAdmin ? `<button class="btn-danger" data-id="${escapeHTML(lead.id)}" style="margin-left:6px;">Delete</button>` : ''}
             </td>
         `;
         tbody.appendChild(tr);
@@ -808,12 +801,40 @@ async function sendLeadTag(token) {
     }
 }
 
-function openEditPassengersModal(leadId) {
+function openLeadDetailsModal(leadId) {
     let lead = allLeads.find(l => String(l.id) === String(leadId));
     if (!lead) lead = { id: leadId, passengers: [], followUpNotes: [], documents: [], tagHistory: [] };
 
     currentEditingLeadId = leadId;
     const currentCount = lead.numberOfPersons || (lead.passengers ? lead.passengers.length : 1);
+
+    // 📌 Top info panel (readonly + editable)
+    document.getElementById('detailDateAdded').textContent = lead.createdAt ? new Date(lead.createdAt).toLocaleString() : '—';
+    document.getElementById('detailAddedBy').textContent = lead.addedByName ? `${lead.addedByName}` : '—';
+    document.getElementById('detailName').value = lead.name || '';
+    document.getElementById('detailPhone').value = lead.phone || '';
+    document.getElementById('detailEmail').value = lead.email || '';
+    document.getElementById('detailSource').value = lead.source || '';
+    document.getElementById('detailDestination').value = lead.destination || '';
+    document.getElementById('detailTravelDate').value = lead.travelDate || '';
+    document.getElementById('detailDuration').value = lead.duration || '';
+    document.getElementById('detailNumPersons').value = lead.numberOfPersons || 1;
+    document.getElementById('basicInfoMsg').style.display = 'none';
+
+    // 📌 Status dropdown
+    const statusSelect = document.getElementById('leadStatusSelect');
+    if (statusSelect) statusSelect.value = lead.leadStatus || 'New Lead';
+
+    // 📌 4 Assignments — reuse buildAssignCell but with a modal-specific wrapper class
+    const assignWrap = document.getElementById('detailAssignmentsGrid');
+    if (assignWrap) {
+        assignWrap.innerHTML = `
+            <div><label style="font-size:12px;">Visa Assigned</label>${buildAssignCell(lead, 'assignedVisa')}</div>
+            <div><label style="font-size:12px;">Ticketing Assigned</label>${buildAssignCell(lead, 'assignedTicketing')}</div>
+            <div><label style="font-size:12px;">Finance Assigned</label>${buildAssignCell(lead, 'assignedFinance')}</div>
+            <div><label style="font-size:12px;">Tour Assigned</label>${buildAssignCell(lead, 'assignedTour')}</div>
+        `;
+    }
 
     showModalSection(null); // sab sections hide kar do, user button click kare
 
@@ -848,7 +869,70 @@ function openEditPassengersModal(leadId) {
     document.getElementById('tagMsg').style.display = 'none';
     renderTagHistory(lead.tagHistory || []);
 
-    document.getElementById('editPassengersModal').style.display = 'flex';
+    document.getElementById('leadDetailsModal').style.display = 'flex';
+}
+
+// 📌 Basic Info Save (Name, Phone, Email, Source, Destination, Travel Date, Duration, No. of persons)
+async function saveBasicInfo(token) {
+    if (!currentEditingLeadId) return;
+    const msgBox = document.getElementById('basicInfoMsg');
+    msgBox.style.display = 'none';
+
+    const payload = {
+        name: document.getElementById('detailName').value.trim(),
+        phone: document.getElementById('detailPhone').value.trim(),
+        email: document.getElementById('detailEmail').value.trim(),
+        source: document.getElementById('detailSource').value.trim(),
+        destination: document.getElementById('detailDestination').value.trim(),
+        travelDate: document.getElementById('detailTravelDate').value.trim(),
+        duration: document.getElementById('detailDuration').value.trim(),
+        numberOfPersons: document.getElementById('detailNumPersons').value
+    };
+
+    try {
+        const res = await fetch(`/api/leads/${currentEditingLeadId}/basic-info`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            msgBox.innerText = data.error || 'Failed to save info';
+            msgBox.style.display = 'block';
+            return;
+        }
+        await loadLeads(token);
+        msgBox.style.color = '#22543d';
+        msgBox.innerText = '✅ Saved!';
+        msgBox.style.display = 'block';
+        setTimeout(() => { msgBox.style.display = 'none'; }, 2000);
+    } catch (err) {
+        console.error("Save basic info error:", err);
+        msgBox.innerText = 'Server error while saving.';
+        msgBox.style.display = 'block';
+    }
+}
+
+// 📌 Status update
+async function updateLeadStatus(token) {
+    if (!currentEditingLeadId) return;
+    const status = document.getElementById('leadStatusSelect').value;
+
+    try {
+        const res = await fetch(`/api/leads/${currentEditingLeadId}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ status })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            alert(data.error || 'Failed to update status');
+            return;
+        }
+        await loadLeads(token);
+    } catch (err) {
+        console.error("Status update error:", err);
+    }
 }
 
 function renderModalPassengerInputs(count, existingPassengers = []) {
@@ -939,7 +1023,7 @@ async function savePassengersFromModal(token) {
         if (!res.ok) {
             alert(data.error || 'Failed to update details');
         } else {
-            document.getElementById('editPassengersModal').style.display = 'none';
+            document.getElementById('leadDetailsModal').style.display = 'none';
             loadLeads(token);
         }
     } catch (err) {
@@ -958,6 +1042,8 @@ async function addLead(token) {
     formData.append('phone', document.getElementById('newLeadPhone').value);
     formData.append('destination', document.getElementById('newLeadDestination').value);
     formData.append('source', document.getElementById('newLeadSource').value);
+    formData.append('travelDate', document.getElementById('newLeadTravelDate').value);
+    formData.append('duration', document.getElementById('newLeadDuration').value);
     formData.append('numberOfPersons', numberOfPersons);
     formData.append('passengers', JSON.stringify([]));
 
