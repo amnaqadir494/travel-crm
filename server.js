@@ -409,7 +409,7 @@ app.post('/api/admin/users/:id/reset-password', authenticateToken, requireAdmin,
 
         await foundUser.update({ password: null });
         res.json({
-            message: 'Password reset successfully! ${foundUser.name} (${buildEmployeeId(foundUser.id)}) can now set a new password via "Activate Account" — please share their Employee ID and name with them.'
+            message: `Password reset successfully! ${foundUser.name} (${buildEmployeeId(foundUser.id)}) can now set a new password via "Activate Account" — please share their Employee ID and name with them.`
         });
     } catch (err) {
         console.error("❌ Reset Password Error:", err);
@@ -663,7 +663,7 @@ app.patch('/api/leads/:id/status', authenticateToken, [
 // Chain: Sales ne Finance ko tag kia -> Finance ne Visa ko tag kia -> waghera
 // ==========================================
 app.post('/api/leads/:id/tag', authenticateToken, [
-    body('toEmail').isEmail().withMessage('Valid employee email required (employee ka email set hona zaroori hai)'),
+    body('toEmail').isEmail().withMessage('Valid employee email required (the employee must have an email set)'),
     body('department').notEmpty().withMessage('Department is required')
 ], async (req, res) => {
     try {

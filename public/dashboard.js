@@ -335,7 +335,7 @@ function injectAnalyticsUI() {
     analyticsDiv.style.cssText = 'margin-top: 15px; display: none;';
 
     analyticsDiv.innerHTML = `
-        <h3 style="margin-top: 0; margin-bottom: 15px; color: #2d3748; font-size: 18px;">📊 Dashboard Analytics & Workload Summary</h3>
+        <h3 style="margin-top: 0; margin-bottom: 15px; color: #2d3748; font-size: 18px;">📊 Dashboard Analytics</h3>
 
         <div style="font-size: 13px; font-weight: bold; color: #4a5568; margin-bottom: 8px;">🏢 Overall Company Leads</div>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 20px;">
@@ -355,24 +355,8 @@ function injectAnalyticsUI() {
             </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-top: 15px;">
-            <div style="background: #f7fafc; padding: 12px; border-radius: 6px; border: 1px solid #cbd5e0;">
-                <strong style="font-size: 13px; color: #2d3748;">Visa Department Workload</strong>
-                <div id="workloadVisa" style="font-size: 13px; color: #4a5568; margin-top: 5px;">Assigned: 0</div>
-            </div>
-            <div style="background: #f7fafc; padding: 12px; border-radius: 6px; border: 1px solid #cbd5e0;">
-                <strong style="font-size: 13px; color: #2d3748;">Ticketing Dept Workload</strong>
-                <div id="workloadTicketing" style="font-size: 13px; color: #4a5568; margin-top: 5px;">Assigned: 0</div>
-            </div>
-            <div style="background: #f7fafc; padding: 12px; border-radius: 6px; border: 1px solid #cbd5e0;">
-                <strong style="font-size: 13px; color: #2d3748;">Finance Dept Workload</strong>
-                <div id="workloadFinance" style="font-size: 13px; color: #4a5568; margin-top: 5px;">Assigned: 0</div>
-            </div>
-            <div style="background: #f7fafc; padding: 12px; border-radius: 6px; border: 1px solid #cbd5e0;">
-                <strong style="font-size: 13px; color: #2d3748;">Tour Dept Workload</strong>
-                <div id="workloadTour" style="font-size: 13px; color: #4a5568; margin-top: 5px;">Assigned: 0</div>
-            </div>
-        </div>
+        <div style="font-size: 13px; font-weight: bold; color: #4a5568; margin-bottom: 8px; margin-top: 5px;">📌 Leads by Status</div>
+        <div id="statusBreakdownGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px;"></div>
     `;
 
     const addLeadCard = document.getElementById('addLeadCard');
@@ -385,16 +369,18 @@ function injectAnalyticsUI() {
 
 function updateAnalyticsStats(leads) {
     const total = leads.length;
-    let visaAssigned = 0, ticketingAssigned = 0, financeAssigned = 0, tourAssigned = 0;
     let myTotal = 0;
     const myEmail = currentUser.email;
     const isAdmin = currentUser.department === 'Admin';
 
+    // 📌 Status-wise count
+    const statusCounts = {};
+    LEAD_STATUSES.forEach(s => { statusCounts[s] = 0; });
+
     leads.forEach(lead => {
-        if (lead.assignedVisa) visaAssigned++;
-        if (lead.assignedTicketing) ticketingAssigned++;
-        if (lead.assignedFinance) financeAssigned++;
-        if (lead.assignedTour) tourAssigned++;
+        const status = lead.leadStatus || 'New Lead';
+        if (statusCounts[status] === undefined) statusCounts[status] = 0;
+        statusCounts[status]++;
 
         const isAssignedToMe = !isAdmin && (
             lead.assignedVisa === myEmail ||
@@ -410,10 +396,24 @@ function updateAnalyticsStats(leads) {
 
     if (document.getElementById('statTotalLeads')) document.getElementById('statTotalLeads').textContent = total;
 
-    if (document.getElementById('workloadVisa')) document.getElementById('workloadVisa').textContent = `Assigned Leads: ${visaAssigned}`;
-    if (document.getElementById('workloadTicketing')) document.getElementById('workloadTicketing').textContent = `Assigned Leads: ${ticketingAssigned}`;
-    if (document.getElementById('workloadFinance')) document.getElementById('workloadFinance').textContent = `Assigned Leads: ${financeAssigned}`;
-    if (document.getElementById('workloadTour')) document.getElementById('workloadTour').textContent = `Assigned Leads: ${tourAssigned}`;
+    const statusColors = {
+        'New Lead': '#3182ce',
+        'Contacted': '#d69e2e',
+        'Quoted': '#805ad5',
+        'Confirmed': '#38a169',
+        'Complete': '#2f855a',
+        'Cancelled/Refund': '#e53e3e'
+    };
+
+    const gridEl = document.getElementById('statusBreakdownGrid');
+    if (gridEl) {
+        gridEl.innerHTML = Object.keys(statusCounts).map(status => `
+            <div style="background: #f7fafc; padding: 12px; border-radius: 6px; border: 1px solid #cbd5e0; border-left: 4px solid ${statusColors[status] || '#718096'};">
+                <strong style="font-size: 13px; color: #2d3748;">${escapeHTML(status)}</strong>
+                <div style="font-size: 22px; font-weight: bold; color: ${statusColors[status] || '#4a5568'}; margin-top: 5px;">${statusCounts[status]}</div>
+            </div>
+        `).join('');
+    }
 
     if (!isAdmin) {
         if (document.getElementById('statMyTotal')) document.getElementById('statMyTotal').textContent = myTotal;
@@ -1224,7 +1224,7 @@ function renderNotificationsPanel() {
     if (!panel) return;
 
     if (NOTIFICATIONS.length === 0) {
-        panel.innerHTML = '<div style="padding: 15px; font-size: 13px; color: #718096;">Koi notification nahi.</div>';
+        panel.innerHTML = '<div style="padding: 15px; font-size: 13px; color: #718096;">No notifications yet.</div>';
         return;
     }
 
