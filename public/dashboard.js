@@ -1230,7 +1230,10 @@ function renderNotificationsPanel() {
 
     panel.innerHTML = NOTIFICATIONS.map(n => `
         <div class="notif-item" data-id="${escapeHTML(n.id)}" style="padding: 10px 12px; border-bottom: 1px solid #edf2f7; cursor: pointer; background: ${n.isRead ? '#fff' : '#ebf8ff'};">
-            <div style="font-size: 13px; color: #2d3748;">${escapeHTML(n.message)}</div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+                <div style="font-size: 13px; color: #2d3748; flex: 1;">${escapeHTML(n.message)}</div>
+                <span style="flex-shrink: 0; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; ${n.isRead ? 'background:#e2e8f0; color:#718096;' : 'background:#3182ce; color:#fff;'}">${n.isRead ? 'Read' : 'New'}</span>
+            </div>
             <div style="font-size: 11px; color: #a0aec0; margin-top: 3px;">${n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}</div>
         </div>
     `).join('');
