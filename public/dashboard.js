@@ -3,12 +3,13 @@ let allLeads = [];
 let EMPLOYEES = [];
 let NOTIFICATIONS = [];
 let currentEditingLeadId = null;
+let currentEditingLeadPassengers = [];
 let currentEditingEmployeeId = null;
 
 // 🏷️ Sab departments (tagging dropdown ke liye) — Employee form jese hi list
 const ALL_DEPARTMENTS = [
     'Admin', 'Ticketing/Flights', 'Finance', 'Cordination', 'Domestic Group',
-    'Domestic FIT', 'International Group', 'International FIT', 'Visa',
+    'Domestic Private', 'International Group', 'International FIT', 'Visa',
     'Marketing', 'Customer Support', 'Religious Tours', 'Corporate'
 ];
 
@@ -133,10 +134,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.getElementById('leadDetailsModal').style.display = 'none';
     });
 
-    document.getElementById('modalNumPersons').addEventListener('input', (e) => {
-        renderModalPassengerInputs(e.target.value);
-    });
-
     document.getElementById('saveModalBtn').addEventListener('click', () => {
         savePassengersFromModal(token);
     });
@@ -144,6 +141,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Modal section switching & actions
     document.addEventListener('click', (e) => {
         if (e.target && e.target.id === 'btnOpenTraveller') {
+            // 📌 Har baar khulte waqt current "No. of Travellers" ke hisaab se forms dikhao
+            const count = parseInt(document.getElementById('detailNumPersons').value) || 1;
+            document.getElementById('travellerCountLabel').textContent = count;
+            renderModalPassengerInputs(count, currentEditingLeadPassengers);
             showModalSection('travellerSection');
         }
         if (e.target && e.target.id === 'btnOpenFollowUp') {
@@ -258,6 +259,13 @@ document.addEventListener("DOMContentLoaded", async () => {
             const leadId = assignSelect.getAttribute('data-id');
             const field = assignSelect.getAttribute('data-field');
             updateAssignment(leadId, field, assignSelect.value, token);
+            return;
+        }
+
+        const statusSelect = e.target.closest('.lead-status-select');
+        if (statusSelect) {
+            const leadId = statusSelect.getAttribute('data-id');
+            updateLeadStatusInline(leadId, statusSelect.value, token);
             return;
         }
     });
@@ -654,7 +662,12 @@ function applySearchFilter() {
         renderLeads(allLeads, '');
         return;
     }
-    const filtered = allLeads.filter(lead => (lead.name || '').toLowerCase().includes(query));
+    // 🔍 Ab Name, Destination aur Phone teeno mein match dhoondta hai
+    const filtered = allLeads.filter(lead =>
+        (lead.name || '').toLowerCase().includes(query) ||
+        (lead.destination || '').toLowerCase().includes(query) ||
+        (lead.phone || '').toLowerCase().includes(query)
+    );
     renderLeads(filtered, query);
 }
 
@@ -662,7 +675,7 @@ const FIELD_DEPARTMENTS = {
     assignedVisa: ['Visa'],
     assignedTicketing: ['Ticketing/Flights'],
     assignedFinance: ['Finance'],
-    assignedTour: ['Domestic Group', 'International Group', 'International FIT', 'Religious Tours', 'Domestic FIT']
+    assignedTour: ['Domestic Group', 'International Group', 'International FIT', 'Religious Tours', 'Domestic Private']
 };
 
 function normalizeDept(str) {
@@ -713,11 +726,19 @@ function renderLeads(leads, searchQuery = '') {
             ? `<div style="font-size: 12px;"><strong>${escapeHTML(lead.currentTagName)}</strong><br><span style="color:#718096;">${escapeHTML(lead.currentTagDepartment || '')}</span></div>`
             : `<span style="color:#a0aec0; font-size: 12px;">Not tagged</span>`;
 
+        // 📌 Tour Status cell — ab lead ki Status value (New Lead/Contacted/...) dikhata hai, employee nahi
+        const currentStatus = lead.leadStatus || 'New Lead';
+        let statusOptions = '';
+        LEAD_STATUSES.forEach(s => {
+            statusOptions += `<option value="${escapeHTML(s)}" ${s === currentStatus ? 'selected' : ''}>${escapeHTML(s)}</option>`;
+        });
+        const tourStatusCell = `<select class="lead-status-select" data-id="${escapeHTML(lead.id)}">${statusOptions}</select>`;
+
         tr.innerHTML = `
             <td style="${nameCellStyle}">${escapeHTML(lead.name)}</td>
             <td>${escapeHTML(lead.phone)}</td>
             <td>${escapeHTML(lead.destination)}</td>
-            <td>${buildAssignCell(lead, 'assignedTour')}</td>
+            <td>${tourStatusCell}</td>
             <td>${tagCell}</td>
             <td style="white-space: nowrap;">
                 <button type="button" class="btn-view-lead btn-edit" data-id="${escapeHTML(lead.id)}" title="View / Edit Details">Edit</button>
@@ -844,8 +865,11 @@ function openLeadDetailsModal(leadId) {
 
     showModalSection(null); // sab sections hide kar do, user button click kare
 
-    document.getElementById('modalNumPersons').value = currentCount;
-    renderModalPassengerInputs(currentCount, lead.passengers || []);
+    // 📌 Travellers cache — Travellers tab khulte waqt current count ke sath use hoga
+    currentEditingLeadPassengers = lead.passengers || [];
+    const travellerLabel = document.getElementById('travellerCountLabel');
+    if (travellerLabel) travellerLabel.textContent = currentCount;
+    renderModalPassengerInputs(currentCount, currentEditingLeadPassengers);
 
     const notesContainer = document.getElementById('followUpNotesList');
     if (notesContainer) {
@@ -941,6 +965,25 @@ async function updateLeadStatus(token) {
     }
 }
 
+// 📌 Status update seedha table ke "Tour Status" dropdown se (bina modal khole)
+async function updateLeadStatusInline(leadId, status, token) {
+    try {
+        const res = await fetch(`/api/leads/${leadId}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ status })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            alert(data.error || 'Failed to update status');
+        }
+        await loadLeads(token);
+    } catch (err) {
+        console.error("Inline status update error:", err);
+        await loadLeads(token);
+    }
+}
+
 function renderModalPassengerInputs(count, existingPassengers = []) {
     const container = document.getElementById('modalPassengersContainer');
     container.innerHTML = '';
@@ -977,7 +1020,7 @@ function renderModalPassengerInputs(count, existingPassengers = []) {
 async function savePassengersFromModal(token) {
     if (!currentEditingLeadId) return;
 
-    const count = parseInt(document.getElementById('modalNumPersons').value) || 1;
+    const count = parseInt(document.getElementById('detailNumPersons').value) || 1;
     const boxes = document.querySelectorAll('.modal-passenger-box');
     const formData = new FormData();
     formData.append('numberOfPersons', count);
